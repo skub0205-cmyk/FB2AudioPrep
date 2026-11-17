@@ -25,6 +25,22 @@ jobs:
           unzip -q "FB2AudioPrep-1.9.0-cloud-build(1).zip" -d /tmp/fb2src
           cp -a /tmp/fb2src/FB2AudioPrep-1.9.0/. .
 
+      - name: Configure Java and Kotlin JVM target
+        run: |
+          cat >> app/build.gradle.kts <<'EOF'
+
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+
+          kotlin {
+              jvmToolchain(17)
+          }
+          EOF
+          
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
