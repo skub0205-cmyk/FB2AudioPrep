@@ -152,8 +152,8 @@ class BookReaderActivity : Activity() {
         }
         footer.addView(progress, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         root.addView(footer)
-        scroll.setOnScrollChangeListener { v: ScrollView, _, y, _, _ ->
-            val range = (body.height - v.height).coerceAtLeast(1)
+        scroll.setOnScrollChangeListener { _, _, y, _, _ ->
+            val range = (body.height - scroll.height).coerceAtLeast(1)
             progress.text = "${((y.toFloat() / range) * 100).roundToInt().coerceIn(0, 100)}%"
         }
         setContentView(root)
