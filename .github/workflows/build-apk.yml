@@ -31,6 +31,9 @@ jobs:
       - name: Apply FB2AudioPrep 2.0.1 full-screen reader UI
         run: python3 patches/apply_v3_patch.py
 
+      - name: Apply FB2AudioPrep reader UX refresh
+        run: python3 patches/apply_v4_reader_ux.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
