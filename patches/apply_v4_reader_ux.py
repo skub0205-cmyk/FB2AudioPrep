@@ -119,14 +119,14 @@ class BookReaderActivity : Activity() {
     private fun fontDialog() {
         val sizes=floatArrayOf(16f,19f,22f,26f)
         AlertDialog.Builder(this).setTitle("Размер текста")
-            .setSingleChoiceItems(arrayOf("Маленький","Обычный","Крупный","Очень крупный"),sizes.indexOf(font).coerceAtLeast(1)){d,i->
+            .setSingleChoiceItems(arrayOf("Маленький","Обычный","Крупный","Очень крупный"),(sizes.indices.firstOrNull { sizes[it] == font } ?: 1)){d,i->
                 font=sizes[i]; body.textSize=font; save(); d.dismiss()
             }.setNegativeButton("Закрыть",null).show()
     }
     private fun spacingDialog() {
         val values=floatArrayOf(1.05f,1.18f,1.38f)
         AlertDialog.Builder(this).setTitle("Межстрочный интервал")
-            .setSingleChoiceItems(arrayOf("Компактный","Обычный","Свободный"),values.indexOf(spacing).coerceAtLeast(1)){d,i->
+            .setSingleChoiceItems(arrayOf("Компактный","Обычный","Свободный"),(values.indices.firstOrNull { values[it] == spacing } ?: 1)){d,i->
                 spacing=values[i]; body.setLineSpacing(dp(4).toFloat(),spacing); save(); d.dismiss()
             }.setNegativeButton("Закрыть",null).show()
     }
