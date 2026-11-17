@@ -34,6 +34,9 @@ jobs:
       - name: Apply FB2AudioPrep reader UX refresh
         run: python3 patches/apply_v4_reader_ux.py
 
+      - name: Add Russian voice engine contracts
+        run: python3 patches/apply_v5_russian_voice_contracts.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
