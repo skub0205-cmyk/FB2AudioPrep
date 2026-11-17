@@ -25,9 +25,6 @@ jobs:
           unzip -q "FB2AudioPrep-1.9.0-cloud-build(1).zip" -d /tmp/fb2src
           cp -a /tmp/fb2src/FB2AudioPrep-1.9.0/. .
 
-      - name: Inspect source for next feature integration
-        run: python3 patches/inspect_source.py
-
       - name: Apply FB2AudioPrep 2.0.0 fixes
         run: python3 patches/apply_v2_patch.py
 
