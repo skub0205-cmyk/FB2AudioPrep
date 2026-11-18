@@ -53,8 +53,12 @@ def read_rows(path):
 
 def candidate_text(candidate):
     if isinstance(candidate, str):
-        return candidate, ""
-    return candidate["name"], ", ".join(candidate.get("aliases", []))
+        return candidate, "", "unknown"
+    return (
+        candidate["name"],
+        ", ".join(candidate.get("aliases", [])),
+        candidate.get("gender", "unknown"),
+    )
 
 
 def flatten(rows):
@@ -62,14 +66,15 @@ def flatten(rows):
     for row in rows:
         target = norm(row["speaker"])
         for candidate in row["candidates"]:
-            name, aliases = candidate_text(candidate)
+            name, aliases, gender = candidate_text(candidate)
             positive = target == norm(name) or target in [norm(x) for x in aliases.split(", ") if x]
             text = (
                 "[QUOTE] " + row["quote"] +
                 " [LEFT CONTEXT] " + row.get("context_before", "") +
                 " [RIGHT CONTEXT] " + row.get("context_after", "") +
                 " [CANDIDATE] " + name +
-                " [ALIASES] " + aliases
+                " [ALIASES] " + aliases +
+                " [CANDIDATE GENDER] " + gender
             )
             samples.append({
                 "quote_id": str(row["quote_id"]),
