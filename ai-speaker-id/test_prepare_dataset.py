@@ -71,10 +71,10 @@ class DatasetPreparationTests(unittest.TestCase):
 
     def test_stress_marked_speaker_name_is_recognized(self):
         rows, unresolved, candidates, _ = self.extract(
-            "— Поправь меня. — задумчиво произнёс Артём."
+            "— Поправь меня. — задумчиво произнёс Артё\u0301м."
         )
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["speaker"], "Артём")
+        self.assertEqual(module.NORM(rows[0]["speaker"]), "артём")
 
     def test_literal_escaped_newlines_are_split_into_paragraphs(self):
         paragraphs = module.paragraphs_of(
