@@ -52,6 +52,20 @@ class DatasetPreparationTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["speaker"], "Самуру")
 
+    def test_gender_is_inferred_from_feminine_speech_verb(self):
+        rows, unresolved, candidates, _ = self.extract(
+            "— Я согласна. — спокойно сказала Нурина."
+        )
+        self.assertEqual(rows[0]["speaker_gender"], "female")
+        self.assertEqual(candidates[0]["gender"], "female")
+
+    def test_gender_is_inferred_from_masculine_speech_verb(self):
+        rows, unresolved, candidates, _ = self.extract(
+            "— Поправь меня. — задумчиво произнёс Дима."
+        )
+        self.assertEqual(rows[0]["speaker_gender"], "male")
+        self.assertEqual(candidates[0]["gender"], "male")
+
     def test_fb2_xml_is_read_as_paragraph_text(self):
         import tempfile
         xml = (
