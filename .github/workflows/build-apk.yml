@@ -25,6 +25,13 @@ jobs:
           unzip -q "FB2AudioPrep-1.9.0-cloud-build(1).zip" -d /tmp/fb2src
           cp -a /tmp/fb2src/FB2AudioPrep-1.9.0/. .
 
+      - name: Inspect book import flow before fixes
+        run: |
+          echo '--- MainActivity book import handlers ---'
+          grep -n -E 'openBook|onActivityResult|ActivityResult|GetContent|OpenDocument|originalText|processedText|contentResolver' app/src/main/java/ru/fbaudioprep/MainActivity.kt || true
+          echo '--- MainActivity source (first 320 lines) ---'
+          sed -n '1,320p' app/src/main/java/ru/fbaudioprep/MainActivity.kt
+
       - name: Apply FB2AudioPrep 2.0.0 fixes
         run: python3 patches/apply_v2_patch.py
 
