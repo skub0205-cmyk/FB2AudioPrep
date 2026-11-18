@@ -16,6 +16,15 @@ for line in imports:
             raise SystemExit("Cannot locate MainActivity package/import section")
         m = m[:package_end] + "\n" + line + m[package_end:]
 
+# Remove the obsolete experimental CSN ranker hooks. The app now uses the
+# original TeraTTS m10b implementation above, not the incompatible CSN model.
+legacy_start = m.find("    private fun applyNeuralSpeakerRanker(")
+if legacy_start >= 0:
+    class_end = m.find("\\n}\\n", legacy_start)
+    if class_end < 0:
+        raise SystemExit("Cannot locate MainActivity class end after legacy neural ranker")
+    m = m[:legacy_start] + m[class_end+1:]
+
 start = m.find("    private fun analyzeDialogues() {")
 end = m.find("    private fun normalizeCharacterName", start)
 if start < 0 or end < 0:
