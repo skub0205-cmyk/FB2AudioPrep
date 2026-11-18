@@ -142,19 +142,6 @@ if new_fields not in s:
         raise SystemExit("Cannot locate DialogueFinding data class")
     s = s.replace(old_fields, new_fields, 1)
 
-old_split = '''        val sourceParagraphs = text.split(Regex("\\\\r?\\\\n\\\\s*\\\\r?\\\\n"))
-            .map { it.trim() }'''
-new_split = '''        var sourceParagraphs = text.split(Regex("\\\\r?\\\\n\\\\s*\\\\r?\\\\n"))
-            .map { it.trim() }.filter { it.isNotBlank() }
-        if (sourceParagraphs.size < 50) {
-            sourceParagraphs = text.split(Regex("\\\\r?\\\\n+"))
-                .map { it.trim() }.filter { it.isNotBlank() }
-        }'''
-if new_split not in s:
-    if old_split not in s:
-        raise SystemExit("Cannot locate source paragraph splitting")
-    s = s.replace(old_split, new_split, 1)
-
 old_findings = '''        val findings = candidates.map { (_, paragraph) -> analyzeParagraph(paragraph) }.toMutableList()'''
 new_findings = '''        val findings = candidates.map { (sourceIndex, paragraph) ->
             analyzeParagraph(paragraph).copy(
