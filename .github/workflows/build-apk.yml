@@ -101,6 +101,8 @@ jobs:
 
       - name: Keep model installation separate from dialogue analysis
         run: python3 patches/apply_v22_separate_model_download.py
+      - name: Add context-aware AI analysis for attributed quotes
+        run: python3 patches/apply_v23_context_aware_quote_model.py
 
       - name: Configure Java and Kotlin JVM target
         run: |
