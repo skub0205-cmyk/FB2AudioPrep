@@ -96,6 +96,9 @@ jobs:
       - name: Add real model download and dialogue analysis progress indicators
         run: python3 patches/apply_v20_progress_indicators.py
 
+      - name: Speed up explicit dialogue analysis without changing background TTS priority
+        run: python3 patches/apply_v21_analysis_priority.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
