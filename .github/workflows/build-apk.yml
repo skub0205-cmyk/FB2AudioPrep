@@ -75,6 +75,9 @@ jobs:
       - name: Add visible dialogue browser and review without profiles
         run: python3 patches/apply_v12_dialogue_browser_ui.py
 
+      - name: Improve dialogue detection and allow creating speakers from review
+        run: python3 patches/apply_v13_dialogue_detection_and_assignment.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
