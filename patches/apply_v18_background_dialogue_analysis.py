@@ -13,11 +13,11 @@ if "dialogueAnalysisInProgress" not in m:
         1
     )
 
-load_marker = "    private fun load(uri: Uri) {\n        try {"
-load_replacement = "    private fun load(uri: Uri) {\n        dialogueAnalysisToken += 1\n        dialogueAnalysisInProgress = false\n        try {"
+load_marker = "                    sourceName = book.sourceName\n                    originalText = book.text"
+load_replacement = "                    dialogueAnalysisToken += 1\n                    dialogueAnalysisInProgress = false\n" + load_marker
 if load_replacement not in m:
     if load_marker not in m:
-        raise SystemExit("Cannot locate book load method")
+        raise SystemExit("Cannot locate successful book import assignment")
     m = m.replace(load_marker, load_replacement, 1)
 
 start = m.find("    private fun analyzeDialogues() {")
