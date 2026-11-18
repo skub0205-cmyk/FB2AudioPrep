@@ -43,6 +43,9 @@ jobs:
       - name: Add local voice sample capture
         run: python3 patches/apply_v7_voice_sample_capture.py
 
+      - name: Add verified offline model installer
+        run: python3 patches/apply_v8_verified_model_installer.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
