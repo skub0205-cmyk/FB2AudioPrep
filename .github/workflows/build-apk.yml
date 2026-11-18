@@ -69,6 +69,9 @@ jobs:
       - name: Fix asynchronous book import and large-book reader handoff
         run: python3 patches/apply_v10_import_reliability.py
 
+      - name: Improve dialogue attribution and add regression tests
+        run: python3 patches/apply_v11_dialogue_regressions.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
@@ -103,8 +106,8 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build APK
-        run: gradle --no-daemon :app:assembleDebug
+      - name: Run dialogue regression tests and build APK
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
