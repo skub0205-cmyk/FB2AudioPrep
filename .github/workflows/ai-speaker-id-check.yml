@@ -1,0 +1,24 @@
+name: AI speaker dataset checks
+
+on:
+  push:
+    paths:
+      - "ai-speaker-id/**"
+      - ".github/workflows/ai-speaker-id-check.yml"
+  pull_request:
+    paths:
+      - "ai-speaker-id/**"
+      - ".github/workflows/ai-speaker-id-check.yml"
+
+jobs:
+  dataset-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile AI speaker tools
+        run: python -m py_compile ai-speaker-id/*.py
+      - name: Run Russian dialogue extraction tests
+        run: python -m unittest discover -s ai-speaker-id -p "test_*.py" -v
