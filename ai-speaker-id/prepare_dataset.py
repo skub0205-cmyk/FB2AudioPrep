@@ -22,9 +22,9 @@ VERBS = (
 )
 VERB_RE = re.compile(rf"(?iu)\b(?:{VERBS})\b")
 NAME = r"([А-ЯЁ][а-яёА-ЯЁ\u0300-\u036f-]{1,29})"
-NAME_AFTER_VERB = re.compile(rf"(?iu:\b(?:{VERBS})\b)(?:\s+[а-яё-]+){{0,2}}\s+{NAME}")
-NAME_BEFORE_VERB = re.compile(rf"\b{NAME}(?:\s+[а-яё-]+){{0,2}}\s+(?iu:{VERBS})\b")
-PRONOUN_TAG = re.compile(r"(?iu)\b(?:сказал|сказала|ответил|ответила|спросил|спросила|буркнул|буркнула|проворчал|проворчала)\s+(я|он|она)\b")
+NAME_AFTER_VERB = re.compile(rf"(?iu:\b(?:{VERBS})\b)(?:\s+[а-яё\u0300-\u036f-]+){{0,2}}\s+{NAME}")
+NAME_BEFORE_VERB = re.compile(rf"\b{NAME}(?:\s+[а-яё\u0300-\u036f-]+){{0,2}}\s+(?iu:{VERBS})\b")
+PRONOUN_TAG = re.compile(rf"(?iu)\b(?:{VERBS})\s+(я|он|она)\b")
 PASSIVE = re.compile(r"(?iu)\b(?:раздался|раздалось|прозвучал|прозвучало)\b.*\bголос")
 QUOTE = re.compile(r"[«“\"]([^»”\"]{2,1200})[»”\"]")
 NORM = lambda s: re.sub(r"[^а-яё]", "", s.casefold())
