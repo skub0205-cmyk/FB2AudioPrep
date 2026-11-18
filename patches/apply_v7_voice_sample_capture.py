@@ -127,9 +127,12 @@ class VoiceSampleCapture(
                         while (running.get()) {
                             val count = recorder.read(buffer, 0, buffer.size)
                             if (count > 0) file.write(buffer, 0, count)
-                            else if (count < 0) throw IllegalStateException(
-                                "AudioRecord read failed: $count"
-                            )
+                            else if (count < 0) {
+                                if (running.get()) throw IllegalStateException(
+                                    "AudioRecord read failed: " + count
+                                )
+                                break
+                            }
                         }
                         val dataSize = (file.length() - 44L).toInt()
                         writeWavHeader(file, dataSize, sampleRateHz)
