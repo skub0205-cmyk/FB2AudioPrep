@@ -49,6 +49,8 @@ def decode_book(path):
 
 
 def paragraphs_of(text):
+    # Some TTS export files store escaped newlines as literal backslash sequences.
+    text = text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
     text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\x00", "")
     return [re.sub(r"\s+", " ", p).strip() for p in re.split(r"\n\s*\n+", text) if p.strip()]
 
