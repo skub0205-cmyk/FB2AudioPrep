@@ -13,6 +13,7 @@ def main():
     parser.add_argument("--out", default="weak_labels.jsonl")
     parser.add_argument("--unresolved", default="unresolved_review.jsonl")
     parser.add_argument("--aliases", help="Optional JSON map of normalized aliases to canonical names")
+    parser.add_argument("--book-ids", help="Optional JSON map of filename stems to canonical book IDs")
     args = parser.parse_args()
 
     root = Path(args.input_dir)
@@ -20,10 +21,11 @@ def main():
     if not books:
         raise SystemExit(f"No .txt files found in {root}")
     aliases = json.loads(Path(args.aliases).read_text(encoding="utf-8")) if args.aliases else {}
+    book_ids = json.loads(Path(args.book_ids).read_text(encoding="utf-8")) if args.book_ids else {}
     all_labelled, all_unresolved = [], []
     report = []
     for book in books:
-        book_id = book.stem
+        book_id = book_ids.get(book.stem, book.stem)
         labelled, unresolved, candidates, paragraphs = extract(decode_book(book), book_id, aliases)
         all_labelled.extend(labelled)
         all_unresolved.extend(unresolved)
