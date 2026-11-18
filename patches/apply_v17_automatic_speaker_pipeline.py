@@ -159,6 +159,10 @@ dialogue.write_text(s, encoding="utf-8")
 
 main = root / "MainActivity.kt"
 m = main.read_text(encoding="utf-8")
+if "import java.io.File" not in m:
+    m = m.replace("import org.json.JSONObject\n", "import org.json.JSONObject\nimport java.io.File\n", 1)
+if "import java.security.MessageDigest" not in m:
+    m = m.replace("import java.io.File\n", "import java.io.File\nimport java.security.MessageDigest\n", 1)
 old_character_methods = '''    private fun loadCharacters(): List<CharacterProfile> {
         val raw = getSharedPreferences(characterPrefsName, MODE_PRIVATE)
             .getString(characterPrefsKey, "[]") ?: "[]"
@@ -203,7 +207,7 @@ if new_character_methods not in m:
         raise SystemExit("Cannot locate character profile persistence methods")
     m = m.replace(old_character_methods, new_character_methods, 1)
 start = m.find("    private fun analyzeDialogues() {")
-end = m.find("    private fun showDialogueReview()", start)
+end = m.find("    private fun openDialogueBrowser()", start)
 if start < 0 or end < 0:
     raise SystemExit("Cannot locate analyzeDialogues()")
 
