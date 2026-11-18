@@ -78,6 +78,9 @@ jobs:
       - name: Improve dialogue detection and allow creating speakers from review
         run: python3 patches/apply_v13_dialogue_detection_and_assignment.py
 
+      - name: Make dialogue speaker assignment explicit and confirm it
+        run: python3 patches/apply_v14_dialogue_assignment_feedback.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
