@@ -53,12 +53,23 @@ Status: **research candidate only; not selected as the first on-device cloning e
 
 Status: **not yet accepted for Russian cloning.**
 
+### Silero v5.6 Russian and v5 CIS Russian voice pack
+
+This is now the strongest practical preset-voice route for the first Android prototype:
+
+- Official Silero documentation lists five Russian voices in `v5_6_ru`: `aidar` (male), `baya` (female), `kseniya` (female), `xenia` (female), and `eugene` (male). The model supports Russian stress, homographs, questions, emphasis, and exclamations.
+- A separate `v5_cis_base_nostress` pack exposes 29 `ru_*` Russian-language speaker IDs. Its model is MIT-licensed according to the upstream model documentation, but it is older and lacks automatic stress/homograph handling and some expressive prosody. It can be paired with the app's stress-preparation pipeline.
+- Published Android implementation RuVoice demonstrates on-device Silero TTS, optional one-time voice-pack installation, and additional Russian speakers. Its code/model and pack licenses differ: the standard `v5_5_ru` pack is CC BY-NC-SA 4.0, while the extra CIS Russian model is reported as MIT. Re-check exact upstream notices for the selected version before redistribution.
+- The five standard voices provide only two male and three female choices. To reach the requested minimum of five each, select additional male/female candidates from the 29-voice Russian pack only after listening tests and explicit gender/voice metadata checks. Do not infer gender from a name alone.
+
+Status: **preferred first Android preset-engine prototype**, subject to checking whether the current Android runtime and model version can be embedded cleanly, verifying model redistribution terms, and testing all ten selected voices on the target phone. It does not provide voice cloning.
+
 ## Implementation sequence
 
-1. Add sherpa-onnx Android runtime behind `RussianTtsEngine`; begin with the four established Piper Russian voices, each with its own model pack manifest.
-2. Build a candidate audition screen and collect listening results. Do not label voices male/female based only on their names.
+1. Prototype Silero v5.6 Russian on Android behind `RussianTtsEngine`; compare it with sherpa-onnx/Piper before locking the runtime.
+2. Build a candidate audition screen for the five standard Silero voices and the 29-voice CIS Russian pack; collect listening results. Do not label voices male/female based only on their names.
 3. Expand the built-in list to five male and five female only after voice gender, naturalness, pronunciation, license, model hash, and redistribution terms have been verified.
-4. Keep TeraTTSv2 as an optional second preset engine if its Android ONNX integration and storage/performance tests pass.
+4. Keep TeraTTSv2 and Piper as alternate preset engines if their Android integration and storage/performance tests pass.
 5. Keep the cloning UI hidden until a genuinely Russian-capable model passes local recording -> profile creation -> unseen Russian sentence synthesis with airplane mode enabled.
 
 ## Required acceptance tests
