@@ -20,7 +20,7 @@ for line in imports:
 # original TeraTTS m10b implementation above, not the incompatible CSN model.
 legacy_start = m.find("    private fun applyNeuralSpeakerRanker(")
 if legacy_start >= 0:
-    class_end = m.find("\\n}\\n", legacy_start)
+    class_end = m.find("\n}\n", legacy_start)
     if class_end < 0:
         raise SystemExit("Cannot locate MainActivity class end after legacy neural ranker")
     m = m[:legacy_start] + m[class_end+1:]
