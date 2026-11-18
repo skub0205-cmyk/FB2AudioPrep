@@ -145,7 +145,7 @@ def extract(text, book_id, aliases):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--book", required=True, help="Local TXT, UTF-8 or Windows-1251")
+    parser.add_argument("--book", required=True, help="Local TXT or FB2 file")
     parser.add_argument("--book-id", required=True, help="Stable unique book ID")
     parser.add_argument("--out", default="weak_labels.jsonl")
     parser.add_argument("--unresolved", default="unresolved_review.jsonl")
