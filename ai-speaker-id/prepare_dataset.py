@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 VERBS = (
@@ -89,6 +90,18 @@ def speaker_from(tag):
     return None, None
 
 
+def gender_from_speech_tag(tag):
+    match = VERB_RE.search(tag)
+    if not match:
+        return "unknown"
+    verb = match.group(0).casefold()
+    if verb.endswith(("лась", "ла")):
+        return "female"
+    if verb.endswith(("лся", "л")):
+        return "male"
+    return "unknown"
+
+
 def extract(text, book_id, aliases):
     paragraphs = paragraphs_of(text)
     labelled, unresolved = [], []
@@ -121,7 +134,11 @@ def extract(text, book_id, aliases):
                 })
                 continue
             canonical = mapped_alias or speaker
-            candidate_aliases.setdefault(canonical, set()).add(speaker)
+            speaker_gender = gender_from_speech_tag(tag)
+            profile = candidate_aliases.setdefault(canonical, {"aliases": set(), "genders": Counter()})
+            profile["aliases"].add(speaker)
+            if speaker_gender != "unknown":
+                profile["genders"][speaker_gender] += 1
             before = " ".join(paragraphs[max(0, pi - 2):pi])
             after = " ".join(paragraphs[pi + 1:pi + 3])
             labelled.append({
@@ -131,13 +148,23 @@ def extract(text, book_id, aliases):
                 "context_before": before[-1800:],
                 "context_after": after[:1800],
                 "speaker": canonical,
+                "speaker_gender": speaker_gender,
                 "label_source": source,
             })
 
-    candidates = [
-        {"name": name, "aliases": sorted(values, key=str.casefold)}
-        for name, values in sorted(candidate_aliases.items(), key=lambda item: item[0].casefold())
-    ]
+    candidates = []
+    for name, profile in sorted(candidate_aliases.items(), key=lambda item: item[0].casefold()):
+        total_gender_votes = sum(profile["genders"].values())
+        gender = "unknown"
+        if total_gender_votes:
+            best_gender, best_votes = profile["genders"].most_common(1)[0]
+            if best_votes / total_gender_votes >= 0.8:
+                gender = best_gender
+        candidates.append({
+            "name": name,
+            "aliases": sorted(profile["aliases"], key=str.casefold),
+            "gender": gender,
+        })
     for row in labelled:
         row["candidates"] = candidates
     return labelled, unresolved, candidates, len(paragraphs)
