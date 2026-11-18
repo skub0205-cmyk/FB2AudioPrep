@@ -60,6 +60,14 @@ class DatasetPreparationTests(unittest.TestCase):
         self.assertEqual(len(unresolved), 2)
         self.assertEqual(candidates, [])
 
+    def test_sentence_opener_and_role_before_verb_are_not_speakers(self):
+        rows, unresolved, candidates, _ = self.extract(
+            "Вдруг ответил парень: — Я не знаю."
+        )
+        self.assertEqual(rows, [])
+        self.assertEqual(candidates, [])
+        self.assertGreaterEqual(len(unresolved), 1)
+
     def test_narrator_aliases_are_scoped_to_each_book(self):
         aliases = {
             "book_a": {"я": "Нико"},
