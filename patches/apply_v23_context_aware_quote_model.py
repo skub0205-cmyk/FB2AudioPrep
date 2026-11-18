@@ -48,11 +48,11 @@ role_windows.write_text(s, encoding="utf-8")
 
 engine = Path("app/src/main/java/ru/fbaudioprep/teratts/TeraRoleEngine.kt")
 e = engine.read_text(encoding="utf-8")
-old_reason = '''                modelChoseSpeaker -> "TeraTTS m10b: нейросеть выбрала «\${guess!!.speaker}» с вероятностью \${(guess.prob * 100).toInt()}%"'''
+old_reason = '''                modelChoseSpeaker -> "TeraTTS m10b: нейросеть выбрала «${guess!!.speaker}» с вероятностью ${(guess.prob * 100).toInt()}%"'''
 new_reason = '''                modelChoseSpeaker && probe.quoted ->
-                    "TeraTTS m10b: ИИ подтвердил говорящего «\${guess!!.speaker}» по контексту цитаты и авторской ремарке (\${(guess.prob * 100).toInt()}%)"
+                    "TeraTTS m10b: ИИ подтвердил говорящего «${guess!!.speaker}» по контексту цитаты и авторской ремарке (${(guess.prob * 100).toInt()}%)"
                 modelChoseSpeaker ->
-                    "TeraTTS m10b: нейросеть выбрала «\${guess!!.speaker}» с вероятностью \${(guess.prob * 100).toInt()}%"'''
+                    "TeraTTS m10b: нейросеть выбрала «${guess!!.speaker}» с вероятностью ${(guess.prob * 100).toInt()}%"'''
 if old_reason not in e:
     raise SystemExit("Cannot locate neural attribution reason")
 e = e.replace(old_reason, new_reason, 1)
