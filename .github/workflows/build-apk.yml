@@ -89,6 +89,7 @@ jobs:
         run: python3 patches/apply_v17_automatic_speaker_pipeline.py
       - name: Run automatic dialogue analysis in background
         run: python3 patches/apply_v18_background_dialogue_analysis.py
+      # Retry after removing the retired CSN adapter from MainActivity.
       - name: Integrate TeraTTS 1.59 RuModernBERT m10b role model
         run: python3 patches/apply_v19_teratts_m10b_integration.py
 
