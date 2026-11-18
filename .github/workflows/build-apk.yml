@@ -124,6 +124,7 @@ jobs:
           FB2_KEYSTORE_PASSWORD: ${{ secrets.FB2_KEYSTORE_PASSWORD }}
           FB2_KEY_ALIAS: ${{ secrets.FB2_KEY_ALIAS }}
           FB2_KEY_PASSWORD: ${{ secrets.FB2_KEY_PASSWORD }}
+          FB2_KEYSTORE_PATH: ${{ runner.temp }}/fb2audioprep-signing.jks
         run: |
           set -euo pipefail
           for name in FB2_KEYSTORE_BASE64 FB2_KEYSTORE_PASSWORD FB2_KEY_ALIAS FB2_KEY_PASSWORD; do
@@ -159,8 +160,6 @@ jobs:
               }
           }
           EOF
-        env:
-          FB2_KEYSTORE_PATH: ${{ runner.temp }}/fb2audioprep-signing.jks
 
       - name: Set up JDK
         uses: actions/setup-java@v4
