@@ -93,6 +93,9 @@ jobs:
       - name: Integrate TeraTTS 1.59 RuModernBERT m10b role model
         run: python3 patches/apply_v19_teratts_m10b_integration.py
 
+      - name: Add real model download and dialogue analysis progress indicators
+        run: python3 patches/apply_v20_progress_indicators.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
