@@ -52,6 +52,16 @@ class DatasetPreparationTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["speaker"], "Самуру")
 
+    def test_narrator_aliases_are_scoped_to_each_book(self):
+        aliases = {
+            "book_a": {"я": "Нико"},
+            "book_b": {"я": "Чину"},
+        }
+        first, _, _, _ = module.extract("— Не начинай, — буркнул я.", "book_a", aliases)
+        second, _, _, _ = module.extract("— Не начинай, — буркнул я.", "book_b", aliases)
+        self.assertEqual(first[0]["speaker"], "Нико")
+        self.assertEqual(second[0]["speaker"], "Чину")
+
     def test_gender_is_inferred_from_feminine_speech_verb(self):
         rows, unresolved, candidates, _ = self.extract(
             "— Я согласна. — спокойно сказала Нурина."
