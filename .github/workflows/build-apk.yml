@@ -142,7 +142,7 @@ jobs:
           }
           with open(os.environ["GITHUB_ENV"], "a") as env:
               for key, value in values.items():
-                  env.write(f"{key}={value}\\n")
+                  env.write(f"{key}={value}\n")
           PY
           python3 - <<'PY'
           from pathlib import Path
