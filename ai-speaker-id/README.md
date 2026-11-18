@@ -26,6 +26,7 @@ The extractor only weak-labels an utterance when it finds a nearby explicit char
 
 \`\`\`json
 {
+  "я": "Нико",
   "искин": "ИскИн",
   "искинн": "ИскИн"
 }
@@ -56,7 +57,7 @@ JSONL, one dialogue instance per line:
 }
 \`\`\`
 
-The correct speaker must be present in candidates. Add all plausible candidates, not only the correct one. Keep the entire book in exactly one split; never randomly split neighbouring quotes from the same book across train/dev/test. A single novel is useful for parser validation and error analysis, but **not sufficient** to establish generalization or a trustworthy held-out accuracy.
+The correct speaker must be present in candidates. Add all plausible candidates, not only the correct one. The alias map can explicitly resolve the first-person narrator (for this particular book, «я» to «Нико»); pronouns are otherwise left unresolved. Keep the entire book in exactly one split; never randomly split neighbouring quotes from the same book across train/dev/test. A single novel is useful for parser validation and error analysis, but **not sufficient** to establish generalization or a trustworthy held-out accuracy.
 
 ## Train
 
