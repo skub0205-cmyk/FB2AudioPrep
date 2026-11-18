@@ -4,9 +4,9 @@ target = Path("app/src/main/java/ru/fbaudioprep/RussianVoiceCandidates.kt")
 target.write_text(r'''package ru.fbaudioprep
 
 /**
- * Audition queue, not an assertion that all models are already bundled.
- * Candidates remain unavailable until their model pack is installed, hash-checked,
- * auditioned on-device, and their original license notice has been verified.
+ * Audition queue. No CIS speaker gender is inferred from a person's name.
+ * All candidates remain unavailable until the pack is installed, checksum-checked,
+ * listened to on-device, and its license notice has been verified.
  */
 data class RussianVoiceCandidate(
     val id: String,
@@ -24,57 +24,53 @@ object RussianVoiceCandidates {
     const val SILERO_RU_PACK = "silero-v5_6_ru"
     const val SILERO_CIS_RU_PACK = "silero-v5_cis_base_nostress"
 
+    private fun cis(id: String) = RussianVoiceCandidate(
+        id = "cis_$id",
+        displayName = id.removePrefix("ru_").replaceFirstChar { it.uppercase() },
+        gender = VoiceGender.NEUTRAL,
+        genderVerified = false,
+        modelPackId = SILERO_CIS_RU_PACK,
+        licenseId = "MIT",
+        stressMode = "manual-or-preprocessed",
+        evidence = "Listed as a Russian-language speaker in RuVoice CIS pack; gender and accent require listening test"
+    )
+
     val all: List<RussianVoiceCandidate> = listOf(
         RussianVoiceCandidate(
-            "silero_aidar", "Aidar", VoiceGender.MALE, true,
+            "silero_aidar", "Aidar", VoiceGender.NEUTRAL, false,
             SILERO_RU_PACK, "CC-BY-NC-SA-4.0", "automatic",
-            "Silero v5.6 Russian speaker list; male voice documented by RuVoice/Silero aliases"
+            "Official Silero v5.6 Russian speaker; gender label must be confirmed by audition"
         ),
         RussianVoiceCandidate(
-            "silero_eugene", "Eugene", VoiceGender.MALE, true,
+            "silero_baya", "Baya", VoiceGender.NEUTRAL, false,
             SILERO_RU_PACK, "CC-BY-NC-SA-4.0", "automatic",
-            "Silero v5.6 Russian speaker list; male voice documented"
+            "Official Silero v5.6 Russian speaker; gender label must be confirmed by audition"
         ),
         RussianVoiceCandidate(
-            "silero_baya", "Baya", VoiceGender.FEMALE, true,
+            "silero_kseniya", "Kseniya", VoiceGender.NEUTRAL, false,
             SILERO_RU_PACK, "CC-BY-NC-SA-4.0", "automatic",
-            "Silero v5.6 Russian speaker list; female voice documented"
+            "Official Silero v5.6 Russian speaker; gender label must be confirmed by audition"
         ),
         RussianVoiceCandidate(
-            "silero_kseniya", "Kseniya", VoiceGender.FEMALE, true,
+            "silero_xenia", "Xenia", VoiceGender.NEUTRAL, false,
             SILERO_RU_PACK, "CC-BY-NC-SA-4.0", "automatic",
-            "Silero v5.6 Russian speaker list; female voice documented"
+            "Official Silero v5.6 Russian speaker; gender label must be confirmed by audition"
         ),
         RussianVoiceCandidate(
-            "silero_xenia", "Xenia", VoiceGender.FEMALE, true,
+            "silero_eugene", "Eugene", VoiceGender.NEUTRAL, false,
             SILERO_RU_PACK, "CC-BY-NC-SA-4.0", "automatic",
-            "Silero v5.6 Russian speaker list; female voice documented"
+            "Official Silero v5.6 Russian speaker; gender label must be confirmed by audition"
         ),
-        RussianVoiceCandidate(
-            "cis_ru_alexandr", "Alexandr", VoiceGender.MALE, true,
-            SILERO_CIS_RU_PACK, "MIT", "manual-or-preprocessed",
-            "CIS pack alias maps ru_alexandr to the documented male Ruslan voice"
-        ),
-        RussianVoiceCandidate(
-            "cis_ru_eduard", "Eduard", VoiceGender.MALE, true,
-            SILERO_CIS_RU_PACK, "MIT", "manual-or-preprocessed",
-            "CIS pack alias maps ru_eduard to the documented male Aidar voice"
-        ),
-        RussianVoiceCandidate(
-            "cis_ru_dmitriy", "Dmitriy", VoiceGender.MALE, false,
-            SILERO_CIS_RU_PACK, "MIT", "manual-or-preprocessed",
-            "Provisional gender label from speaker name; must be confirmed by audition"
-        ),
-        RussianVoiceCandidate(
-            "cis_ru_albina", "Albina", VoiceGender.FEMALE, true,
-            SILERO_CIS_RU_PACK, "MIT", "manual-or-preprocessed",
-            "CIS pack alias maps ru_albina to the documented female Natasha voice"
-        ),
-        RussianVoiceCandidate(
-            "cis_ru_ramilia", "Ramilia", VoiceGender.FEMALE, true,
-            SILERO_CIS_RU_PACK, "MIT", "manual-or-preprocessed",
-            "CIS pack alias maps ru_ramilia to the documented female Irina voice"
-        )
+        cis("ru_aigul"), cis("ru_albina"), cis("ru_alexandr"),
+        cis("ru_alfia"), cis("ru_alfia2"), cis("ru_bogdan"),
+        cis("ru_dmitriy"), cis("ru_eduard"), cis("ru_ekaterina"),
+        cis("ru_gamat"), cis("ru_igor"), cis("ru_karina"),
+        cis("ru_kejilgan"), cis("ru_kermen"), cis("ru_marat"),
+        cis("ru_miyau"), cis("ru_nurgul"), cis("ru_oksana"),
+        cis("ru_onaoy"), cis("ru_ramilia"), cis("ru_roman"),
+        cis("ru_safarhuja"), cis("ru_saida"), cis("ru_sibday"),
+        cis("ru_vika"), cis("ru_zara"), cis("ru_zhadyra"),
+        cis("ru_zhazira"), cis("ru_zinaida")
     )
 
     fun validationErrors(): List<String> {
@@ -82,20 +78,15 @@ object RussianVoiceCandidates {
         if (all.map { it.id }.distinct().size != all.size) {
             errors += "Candidate IDs must be unique"
         }
-        if (all.count { it.gender == VoiceGender.MALE } < 5) {
-            errors += "Need at least five male Russian voice candidates"
-        }
-        if (all.count { it.gender == VoiceGender.FEMALE } < 5) {
-            errors += "Need at least five female Russian voice candidates"
-        }
-        if (all.any { it.licenseId.isBlank() || it.modelPackId.isBlank() }) {
+        if (all.any { it.modelPackId.isBlank() || it.licenseId.isBlank() }) {
             errors += "Every candidate needs a model pack and license"
         }
         return errors
     }
 
     fun releaseReady(): Boolean =
-        validationErrors().isEmpty() && all.none { it.requiresAudition || !it.genderVerified }
+        validationErrors().isEmpty() &&
+            all.none { it.requiresAudition || !it.genderVerified }
 }
 ''', encoding="utf-8")
-print("Added ten Russian Silero voice candidates with explicit verification state.")
+print("Added verified five Silero RU + all 29 CIS RU voices as unclassified audition candidates.")
