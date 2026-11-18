@@ -40,6 +40,9 @@ jobs:
       - name: Add Russian voice audition catalog
         run: python3 patches/apply_v6_russian_voice_candidates.py
 
+      - name: Add local voice sample capture
+        run: python3 patches/apply_v7_voice_sample_capture.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
