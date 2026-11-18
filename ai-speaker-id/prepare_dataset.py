@@ -15,13 +15,13 @@ VERBS = (
     "сказал|сказала|сказали|произнес|произнёс|произнесла|произнесли|"
     "ответил|ответила|ответили|спросил|спросила|спросили|крикнул|крикнула|"
     "прошептал|прошептала|буркнул|буркнула|проворчал|проворчала|"
-    "поинтересовался|поинтересовалась|заявил|заявила|выдал|выдала|"
+    "поинтересовался|поинтересовалась|заявил|заявила|выдал|выдала|высказал|высказала|продолжил|продолжила|подхватил|подхватила|отрапортовал|отрапортовала|процедил|процедила|пробормотал|пробормотала|пояснил|пояснила|объяснил|объяснила|предложил|предложила|напомнил|напомнила|попросил|попросила|потребовал|потребовала|посоветовал|посоветовала|признался|призналась|отметил|отметила|заметил|заметила|переспросил|переспросила|закричал|закричала|рявкнул|рявкнула|отчеканил|отчеканила|прокомментировал|прокомментировала|отозвался|отозвалась|хмыкнул|хмыкнула|вздохнул|вздохнула|отшутился|отшутился|вставил|вставила|согласился|согласилась|воскликнул|воскликнула|подтвердил|подтвердила|объявил|объявила|распорядился|распорядилась|пожаловался|пожаловалась|пошутил|пошутила|отмахнулся|отмахнулась|"
     "отозвался|отозвалась|добавил|добавила|воскликнул|воскликнула|"
     "уточнил|уточнила|возразил|возразила|проговорил|проговорила|"
     "усмехнулся|усмехнулась|пообещал|пообещала|подтвердил|подтвердила"
 )
 VERB_RE = re.compile(rf"(?iu)\b(?:{VERBS})\b")
-NAME = r"([А-ЯЁ][а-яёА-ЯЁ-]{1,29})"
+NAME = r"([А-ЯЁ][а-яёА-ЯЁ\u0300-\u036f-]{1,29})"
 NAME_AFTER_VERB = re.compile(rf"(?iu:\b(?:{VERBS})\b)(?:\s+[а-яё-]+){{0,2}}\s+{NAME}")
 NAME_BEFORE_VERB = re.compile(rf"\b{NAME}(?:\s+[а-яё-]+){{0,2}}\s+(?iu:{VERBS})\b")
 PRONOUN_TAG = re.compile(r"(?iu)\b(?:сказал|сказала|ответил|ответила|спросил|спросила|буркнул|буркнула|проворчал|проворчала)\s+(я|он|она)\b")
@@ -40,12 +40,32 @@ STOPWORDS = {
 
 def decode_book(path):
     raw = Path(path).read_bytes()
+    # FB2 may be plain XML or a ZIP container holding one XML document.
+    if raw.startswith(b"PK"):
+        import io
+        import zipfile
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            members = [name for name in archive.namelist() if name.lower().endswith(".fb2")]
+            if not members:
+                raise ValueError("ZIP archive contains no .fb2 document")
+            raw = archive.read(members[0])
+    if b"<FictionBook" in raw[:4096]:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(raw)
+        paragraphs = []
+        for element in root.iter():
+            if element.tag.rsplit("}", 1)[-1] == "p":
+                value = "".join(element.itertext()).strip()
+                if value:
+                    paragraphs.append(value)
+        if paragraphs:
+            return "\n\n".join(paragraphs)
     for encoding in ("utf-8-sig", "cp1251", "utf-16"):
         try:
             return raw.decode(encoding)
         except UnicodeDecodeError:
             pass
-    raise UnicodeError("Unsupported text encoding; use UTF-8 or Windows-1251")
+    raise UnicodeError("Unsupported input; expected TXT or FB2 in UTF-8/Windows-1251")
 
 
 def paragraphs_of(text):
