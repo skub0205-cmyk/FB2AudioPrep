@@ -32,6 +32,8 @@ The extractor only weak-labels an utterance when it finds a nearby explicit char
 }
 \`\`\`
 
+Explicit speech-verb morphology also contributes character voice metadata: forms such as «сказала» mark a female speaker, «сказал» a male speaker, and ambiguous forms remain unknown. These are evidence-backed profile hints, not guesses from the character's name. The candidate scorer receives this metadata as an additional feature.
+
 Run extraction tests:
 
 \`\`\`bash
