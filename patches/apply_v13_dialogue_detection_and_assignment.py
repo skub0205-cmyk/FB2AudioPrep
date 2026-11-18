@@ -30,10 +30,9 @@ replacement = """    private fun splitIntoDialogueUnits(text: String): List<Stri
     fun analyzeBook(text: String): List<DialogueFinding> {
         val sourceParagraphs = splitIntoDialogueUnits(text)
 """
-if ("private fun splitIntoDialogueUnits" not in s) {
-    if (anchor not in s) raise SystemExit("Cannot locate analyzeBook paragraph split")
+if "private fun splitIntoDialogueUnits" not in s:
+    if anchor not in s: raise SystemExit("Cannot locate analyzeBook paragraph split")
     s = s.replace(anchor, replacement, 1)
-}
 s = s.replace("""                    isDialogueLine(paragraph) ||
                     (hasQuotedSpeech && hasSpeechVerb(paragraph)) ||
 """, """                    isDialogueLine(paragraph) ||
