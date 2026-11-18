@@ -9,16 +9,40 @@ if "dialogueAnalysisInProgress" not in m:
         raise SystemExit("Cannot locate dialogue state properties")
     m = m.replace(
         property_marker,
-        property_marker + "\n    private var dialogueAnalysisInProgress = false\n    private var dialogueAnalysisToken = 0",
+        property_marker + "\n    private var dialogueAnalysisInProgress = false\n    private var dialogueAnalysisToken = 0\n    private var openReviewAfterAnalysis = false",
         1
     )
 
 load_marker = "                    sourceName = book.sourceName\n                    originalText = book.text"
-load_replacement = "                    dialogueAnalysisToken += 1\n                    dialogueAnalysisInProgress = false\n" + load_marker
+load_replacement = "                    dialogueAnalysisToken += 1\n                    dialogueAnalysisInProgress = false\n                    openReviewAfterAnalysis = false\n" + load_marker
 if load_replacement not in m:
     if load_marker not in m:
         raise SystemExit("Cannot locate successful book import assignment")
     m = m.replace(load_marker, load_replacement, 1)
+
+open_start = m.find("    private fun openDialogueBrowser() {")
+open_end = m.find("    private fun showDialogueReview()", open_start)
+if open_start < 0 or open_end < 0:
+    raise SystemExit("Cannot locate asynchronous dialogue browser entry point")
+open_method = """    private fun openDialogueBrowser() {
+        if (originalText.isBlank()) {
+            Toast.makeText(this, "Сначала откройте книгу", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (dialogueAnalysisInProgress) {
+            openReviewAfterAnalysis = true
+            return
+        }
+        if (dialogueFindings.isEmpty()) {
+            openReviewAfterAnalysis = true
+            analyzeDialogues()
+            return
+        }
+        showDialogueReview()
+    }
+
+"""
+m = m[:open_start] + open_method + m[open_end:]
 
 start = m.find("    private fun analyzeDialogues() {")
 end = m.find("    private fun normalizeCharacterName", start)
@@ -86,11 +110,24 @@ method = r"""    private fun analyzeDialogues() {
                     dialogueAnalysisInProgress = false
                     dialogueButton.isEnabled = true
                     characterButton.isEnabled = true
+                    if (openReviewAfterAnalysis) {
+                        openReviewAfterAnalysis = false
+                        if (findings.isNotEmpty()) {
+                            showDialogueReview()
+                        } else {
+                            AlertDialog.Builder(this@MainActivity)
+                                .setTitle("Диалоги не найдены")
+                                .setMessage("Не удалось выделить реплики в этой книге.")
+                                .setPositiveButton("Закрыть", null)
+                                .show()
+                        }
+                    }
                 }
             } catch (error: Throwable) {
                 runOnUiThread {
                     if (token != dialogueAnalysisToken) return@runOnUiThread
                     dialogueAnalysisInProgress = false
+                    openReviewAfterAnalysis = false
                     dialogueButton.isEnabled = true
                     characterButton.isEnabled = true
                     status.text = "Ошибка автоматического анализа: " + (error.message ?: "неизвестная ошибка")
