@@ -38,6 +38,26 @@ Run extraction tests:
 python -m unittest discover -s ai-speaker-id -p "test_*.py" -v
 \`\`\`
 
+For several books, use the batch extractor:
+
+\`\`\`bash
+python ai-speaker-id/prepare_corpus.py \\
+  --input-dir ./books \\
+  --aliases aliases.json \\
+  --out weak_labels.jsonl \\
+  --unresolved unresolved_review.jsonl
+\`\`\`
+
+Then split by whole books (the splitter refuses to use fewer than three distinct books):
+
+\`\`\`bash
+python ai-speaker-id/split_by_book.py \\
+  --input weak_labels.jsonl \\
+  --train train.jsonl \\
+  --dev dev.jsonl \\
+  --test test.jsonl
+\`\`\`
+
 ## Dataset format
 
 JSONL, one dialogue instance per line:
