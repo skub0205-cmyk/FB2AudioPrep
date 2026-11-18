@@ -9,10 +9,10 @@ FB2AudioPrep will use **TeraTTSv2 as its primary TTS engine**. Silero is not the
 
 The reason is the product's priority: natural, expressive audiobook narration and dialogue take precedence over choosing the smallest or easiest model. The app must preserve the user's two playback modes:
 
-1. Character mode: each detected/edited character is assigned a selected voice style.
+1. Character mode: characters and dialogue speakers are detected and assigned voices automatically by default; the user can correct uncertain cases.
 2. Single-voice mode: one selected voice reads the entire book.
 
-Speaker identity and voice assignment remain controlled by FB2AudioPrep. Do not rely on TeraTTS automatic gender guessing to resolve book dialogue.
+Preserve the automatic character/voice workflow users know from TeraTTS 1.59, but improve it in FB2AudioPrep. TeraTTSv2 is the synthesizer; FB2AudioPrep performs dialogue segmentation, character resolution, speaker attribution, and automatic voice assignment. Manual editing is a fallback for low-confidence or incorrect cases, not the normal workflow. See [DIALOGUE_ATTRIBUTION_AUTO_FIRST.md](DIALOGUE_ATTRIBUTION_AUTO_FIRST.md).
 
 ## Verified upstream facts
 
@@ -52,8 +52,9 @@ Recording/importing a sample is not voice cloning. A separate, genuinely compati
 
 ## Voice and dialogue policy
 
-- Character-to-voice mapping belongs to the book's editable character profile, not an automatic gender guess.
+- Character-to-voice mapping is created automatically and stored in the book's character profile; manual correction remains available.
 - Dialogue attribution must use nearby speech tags and narrative context. A vocative such as “Нико!” is not proof that Nico is speaking.
+- Explicit voice descriptions (“женский голос”, “мужской голос”) attached to an utterance outrank name proximity and inferred gender.
 - The test corpus must include the known “Нико” and “ИсКин” passages and confirm the voice selected for each utterance.
 - The catalog must distinguish verified Russian voices from experimental styles. Never infer voice gender from a voice ID or character name; audition and verify.
 
