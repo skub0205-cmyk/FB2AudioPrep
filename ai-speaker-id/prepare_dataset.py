@@ -52,7 +52,11 @@ def paragraphs_of(text):
     # Some TTS export files store escaped newlines as literal backslash sequences.
     text = text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n")
     text = text.replace("\r\n", "\n").replace("\r", "\n").replace("\x00", "")
-    return [re.sub(r"\s+", " ", p).strip() for p in re.split(r"\n\s*\n+", text) if p.strip()]
+    paragraphs = [re.sub(r"\s+", " ", p).strip() for p in re.split(r"\n\s*\n+", text) if p.strip()]
+    # Some TTS exports use one newline per paragraph and only a few blank lines.
+    if len(paragraphs) < 50:
+        paragraphs = [re.sub(r"\s+", " ", p).strip() for p in re.split(r"\n+", text) if p.strip()]
+    return paragraphs
 
 
 def speaker_from(tag):
