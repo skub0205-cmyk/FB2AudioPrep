@@ -28,6 +28,14 @@ PRONOUN_TAG = re.compile(r"(?iu)\b(?:сказал|сказала|ответил|
 PASSIVE = re.compile(r"(?iu)\b(?:раздался|раздалось|прозвучал|прозвучало)\b.*\bголос")
 QUOTE = re.compile(r"[«“\"]([^»”\"]{2,1200})[»”\"]")
 NORM = lambda s: re.sub(r"[^а-яё]", "", s.casefold())
+STOPWORDS = {
+    "что", "кто", "как", "зачем", "почему", "куда", "где", "когда", "это",
+    "я", "он", "она", "ты", "мы", "вы", "мне", "меня", "тебе", "ему", "ей",
+    "они", "них", "него", "нее", "неё", "зато", "ну", "после", "вот", "ведь",
+    "тогда", "потом", "тут", "там", "да", "нет", "если", "хотя", "пока",
+    "уже", "еще", "ещё", "просто", "сейчас", "конечно", "наверное", "однако",
+    "поэтому", "впрочем", "значит", "кстати", "между", "раз", "наконец"
+}
 
 
 def decode_book(path):
@@ -78,7 +86,7 @@ def extract(text, book_id, aliases):
             else:
                 speaker, source = speaker_from(tag)
                 reason = "pronoun_requires_coreference" if speaker in ("я", "он", "она") else "speech_verb_without_explicit_name"
-            if not speaker or speaker in ("я", "он", "она"):
+            if not speaker or speaker.casefold() in STOPWORDS:
                 unresolved.append({
                     "quote_id": hashlib.sha1(f"{book_id}:{pi}:{si}".encode()).hexdigest()[:16],
                     "book_id": book_id, "paragraph_index": pi,
