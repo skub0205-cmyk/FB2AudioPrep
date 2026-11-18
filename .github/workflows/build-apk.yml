@@ -99,6 +99,9 @@ jobs:
       - name: Speed up explicit dialogue analysis without changing background TTS priority
         run: python3 patches/apply_v21_analysis_priority.py
 
+      - name: Keep model installation separate from dialogue analysis
+        run: python3 patches/apply_v22_separate_model_download.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
