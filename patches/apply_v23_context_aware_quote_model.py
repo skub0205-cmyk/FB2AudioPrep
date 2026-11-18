@@ -1,3 +1,5 @@
+role_windows = Path("app/src/main/java/ru/fbaudioprep/teratts/RoleWindows.kt")
+s = role_windows.read_text(encoding="utf-8")
 from pathlib import Path
 import re
 
@@ -30,8 +32,6 @@ if old_filter not in rm:
 rm = rm.replace(old_filter, new_filter, 1)
 role_model.write_text(rm, encoding="utf-8")
 
-role_windows = Path("app/src/main/java/ru/fbaudioprep/teratts/RoleWindows.kt")
-s = role_windows.read_text(encoding="utf-8")
 old = '''        val targets = byPi.filter { (_, l) -> !l.quoted && !((l.kind == 1 || l.kind == 5) && l.rules.isNotEmpty()) }.keys'''
 new = '''        // Attributed quotes must also be read by m10b with their surrounding context.
         // Unattributed thoughts/messages remain excluded. improve() still protects quoted
