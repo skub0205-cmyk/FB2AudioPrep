@@ -13,7 +13,7 @@ else:
     close = method.rfind("        }.start()")
     if close < 0 or "val analysisProgress" not in method:
         raise SystemExit("v24: cannot locate worker closure or progress dialog")
-    recovery = """        } finally {
+    recovery = """        finally {
             // Always release the analysis UI after the worker has actually exited.
             // Posted after success/error callbacks, so it cannot dismiss the dialog early.
             runOnUiThread {
