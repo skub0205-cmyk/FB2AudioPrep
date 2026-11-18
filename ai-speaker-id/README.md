@@ -48,6 +48,15 @@ python ai-speaker-id/prepare_corpus.py \\
   --unresolved unresolved_review.jsonl
 \`\`\`
 
+The optional book-ID map matters when two files are different exports/chunks of the **same novel**. Give both filename stems the same canonical ID so they cannot leak across train/dev/test:
+
+~~~json
+{
+  "edition_a": "same_novel_01",
+  "edition_b": "same_novel_01"
+}
+~~~
+
 Then split by whole books (the splitter refuses to use fewer than three distinct books):
 
 \`\`\`bash
