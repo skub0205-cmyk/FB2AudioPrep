@@ -103,6 +103,8 @@ jobs:
         run: python3 patches/apply_v22_separate_model_download.py
       - name: Add context-aware AI analysis for attributed quotes
         run: python3 patches/apply_v23_context_aware_quote_model.py
+      - name: Guarantee dialogue analysis UI cleanup on every worker exit
+        run: python3 patches/apply_v24_finally_ui_recovery.py
 
       - name: Configure Java and Kotlin JVM target
         run: |
