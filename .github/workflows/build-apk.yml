@@ -81,6 +81,9 @@ jobs:
       - name: Make dialogue speaker assignment explicit and confirm it
         run: python3 patches/apply_v14_dialogue_assignment_feedback.py
 
+      - name: Fix dialogue dialog dismissal sequencing
+        run: python3 patches/apply_v15_dialogue_dialog_lifecycle.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
