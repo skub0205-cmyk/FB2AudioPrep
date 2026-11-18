@@ -1,6 +1,35 @@
 from pathlib import Path
 import re
 
+old_target_class = '''    class Target(val pi: Int, val span: IntArray, val speech: List<IntArray>, val kind: Int, val rules: String) {
+        val hard get() = kind == 0
+    }'''
+new_target_class = '''    class Target(val pi: Int, val span: IntArray, val speech: List<IntArray>, val kind: Int, val rules: String,
+                 val quoted: Boolean = false) {
+        val hard get() = kind == 0
+    }'''
+if old_target_class not in s:
+    raise SystemExit("Cannot locate RoleWindows.Target")
+s = s.replace(old_target_class, new_target_class, 1)
+
+old_target_create = '''                Target(pi, sh(paras[pi]), l.speech.map { sh(it) }, l.kind, l.rules)'''
+new_target_create = '''                Target(pi, sh(paras[pi]), l.speech.map { sh(it) }, l.kind, l.rules, l.quoted)'''
+if old_target_create not in s:
+    raise SystemExit("Cannot locate RoleWindows.Target construction")
+s = s.replace(old_target_create, new_target_create, 1)
+role_windows.write_text(s, encoding="utf-8")
+
+role_model = Path("app/src/main/java/ru/fbaudioprep/teratts/RoleModel.kt")
+rm = role_model.read_text(encoding="utf-8")
+old_filter = '''        val ws = RoleWindows.build(text, lines, names, aliases).filter { w -> w.targets.any { it.hard || it.rules.isEmpty() } }'''
+new_filter = '''        val ws = RoleWindows.build(text, lines, names, aliases).filter { w ->
+            w.targets.any { it.hard || it.rules.isEmpty() || it.quoted }
+        }'''
+if old_filter not in rm:
+    raise SystemExit("Cannot locate RoleModel window filter")
+rm = rm.replace(old_filter, new_filter, 1)
+role_model.write_text(rm, encoding="utf-8")
+
 role_windows = Path("app/src/main/java/ru/fbaudioprep/teratts/RoleWindows.kt")
 s = role_windows.read_text(encoding="utf-8")
 old = '''        val targets = byPi.filter { (_, l) -> !l.quoted && !((l.kind == 1 || l.kind == 5) && l.rules.isNotEmpty()) }.keys'''
