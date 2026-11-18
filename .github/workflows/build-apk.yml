@@ -85,6 +85,8 @@ jobs:
         run: python3 patches/apply_v15_dialogue_dialog_lifecycle.py
       - name: Add offline ONNX neural speaker ranker runtime
         run: python3 patches/apply_v16_neural_speaker_runtime.py
+      - name: Add automatic character discovery and neural attribution
+        run: python3 patches/apply_v17_automatic_speaker_pipeline.py
 
       - name: Configure Java and Kotlin JVM target
         run: |
