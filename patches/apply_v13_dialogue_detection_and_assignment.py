@@ -15,7 +15,7 @@ replacement = """    private fun splitIntoDialogueUnits(text: String): List<Stri
             if (value.isNotEmpty()) units.add(value)
             current.setLength(0)
         }
-        for (line in text.replace("\\\\r\\\\n", "\\\\n").replace('\\\\r', '\\\\n').lines()) {
+        for (line in text.lines()) {
             val trimmed = line.trim()
             if (trimmed.isEmpty()) { flush(); continue }
             val startsDashDialogue = trimmed.startsWith("—") || trimmed.startsWith("–")
