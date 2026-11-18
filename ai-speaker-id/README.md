@@ -113,6 +113,8 @@ python ai-speaker-id/export_onnx.py --checkpoint ./checkpoint --output ./android
 
 The export contains a dynamically quantized ONNX scorer and tokenizer files. Before integrating the pack into the APK, validate that Android ONNX Runtime reproduces Python scores and measure memory, latency, and model size on a real phone. Tokenizer parity is mandatory: Android must use the same patched tokenizer revision as training.
 
+The Android project now includes an ONNX Runtime/DJL tokenizer wrapper in NeuralSpeakerRanker.kt. It batches all candidate characters into one inference call and applies softmax across the candidate scores. The wrapper is ready for a trained pack, but it is **not activated in book analysis yet**: no Russian fine-tuned weights exist until a reviewed multi-book dataset is available, and the analyzer integration must not silently replace rule-based results with an untrained head.
+
 ## Acceptance criteria
 
 1. Report top-1 accuracy, coverage, and accuracy at 70/80/90% confidence on a held-out Russian book set.
