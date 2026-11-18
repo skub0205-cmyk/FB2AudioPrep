@@ -17,9 +17,9 @@ def main():
     args = parser.parse_args()
 
     root = Path(args.input_dir)
-    books = sorted(root.glob("*.txt"))
+    books = sorted(list(root.glob("*.txt")) + list(root.glob("*.fb2")) + list(root.glob("*.FB2")))
     if not books:
-        raise SystemExit(f"No .txt files found in {root}")
+        raise SystemExit(f"No .txt or .fb2 files found in {root}")
     aliases = json.loads(Path(args.aliases).read_text(encoding="utf-8")) if args.aliases else {}
     book_ids = json.loads(Path(args.book_ids).read_text(encoding="utf-8")) if args.book_ids else {}
     all_labelled, all_unresolved = [], []
