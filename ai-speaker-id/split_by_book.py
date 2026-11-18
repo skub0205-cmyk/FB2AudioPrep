@@ -63,6 +63,10 @@ def main():
         "train_quotes": sum(len(books[x]) for x in train_ids),
         "dev_quotes": sum(len(books[x]) for x in dev_ids),
         "test_quotes": sum(len(books[x]) for x in test_ids),
+        "warning": (
+            "Only three to five books: held-out metrics will be unstable; aim for at least ten distinct novels."
+            if len(book_ids) < 6 else None
+        ),
     }, ensure_ascii=False, indent=2))
 
 
