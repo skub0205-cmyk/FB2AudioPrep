@@ -1,0 +1,2241 @@
+package ru.fbaudioprep.teratts
+
+/**
+ * Reading by roles, v2: not just "a man / a woman" but WHO speaks, and HOW.
+ *
+ *  - Speaker: a name from the author words ("сказал Пётр"), a role noun
+ *    ("ответил старик", "произнёс компьютер", "ИИ замолчал"), or a pronoun
+ *    ("сказал он") resolved against the people in the current dialogue: in an
+ *    exchange between two men, "он" after Пётр's line is the other man.
+ *    Lines without author words alternate between the last two speakers.
+ *  - Manner of a line from the author words: шёпот / крик / быстро / медленно.
+ *  - Character traits for the whole book: habitual manner and age words
+ *    (старик, бабушка, мальчик…) give each character a base speed.
+ *
+ * When unsure, the line keeps only its gender (or none) — never a wild guess.
+ * Pure Kotlin, no Android classes.
+ */
+object DialogueAnalyzer2 {
+
+    enum class Role { NARRATOR, SPEECH, MALE, FEMALE }
+    enum class Manner { NORMAL, WHISPER, SHOUT, FAST, SLOW }
+
+    data class Span(
+        val start: Int, val end: Int, val role: Role,
+        val speaker: String? = null, val manner: Manner = Manner.NORMAL
+    )
+
+    /** A speaking character: canonical name, gender, how many lines, suggested speed. */
+    data class Character(val name: String, val role: Role, val lines: Int, val speed: Float, val traits: List<String>)
+
+    /** [aliases]: names found to be one person ("Сноук" → "Лорк", the hero's own name → [HERO]). */
+    class Result(val spans: List<Span>, val characters: List<Character>, val aliases: Map<String, String> = emptyMap())
+
+    /** A line as the rules saw it (for the role model): its paragraph, speech and author words; [kind] 0 — no
+     *  author words that name anyone, 1 a pronoun («ответил он»), 2 «я», 3 a role noun, 4 a name, 5 an introduction. */
+    class Probe(val ps: Int, val pe: Int, val speech: List<IntArray>, val authors: List<IntArray>, val kind: Int, val quoted: Boolean, val speaker: String?)
+    private val probeTL = ThreadLocal<MutableList<Probe>?>()
+
+    /** [analyze] and the lines it saw (the role model reads them). */
+    fun analyzeLines(text: String, prior: Prior? = null): Pair<Result, List<Probe>> {
+        val l = ArrayList<Probe>()
+        probeTL.set(l)
+        try { return analyze(text, prior) to l } finally { probeTL.remove() }
+    }
+
+    /**
+     * What is known beyond this text: genders of characters learned from the whole
+     * book, and the user's corrections — speechKey(line) → speaker name, or
+     * [FORCE_NARRATOR] / [FORCE_UNKNOWN]. A correction also steers turn-taking: the
+     * lines after it alternate from the right person.
+     */
+    class Prior(
+        val genders: Map<String, Role> = emptyMap(),
+        val overrides: Map<String, String> = emptyMap(),
+        /** the whole book's merges (BookRoster): a chapter alone may not show them */
+        val aliases: Map<String, String> = emptyMap()
+    )
+
+    /**
+     * A name and its everyday forms: "Александр" — Саша, Шура, Санька… One person, called by his full
+     * name in the author words and by a short one in the talk, was two characters with two voices.
+     */
+    private val shortNames: Map<String, Set<String>> = run {
+        val m = HashMap<String, MutableSet<String>>()
+        for ((full, forms) in listOf(
+        "александр" to "саша шура саня санька сашка сашенька шурик сашок",
+        "алексей" to "лёша алёша лёшка лёха алёшка лёшенька",
+        "андрей" to "андрюша андрюха андрюшка",
+        "анатолий" to "толя толик толян",
+        "борис" to "боря борька",
+        "вадим" to "вадик",
+        "валентин" to "валя",
+        "валерий" to "валера",
+        "василий" to "вася васька васёк",
+        "виктор" to "витя витька витёк",
+        "виталий" to "виталик",
+        "владимир" to "вова володя вовка вовчик володька",
+        "владислав" to "влад владик",
+        "вячеслав" to "слава славик",
+        "геннадий" to "гена",
+        "георгий" to "жора гоша",
+        "григорий" to "гриша гришка",
+        "дмитрий" to "дима митя димка митька димочка",
+        "евгений" to "женя женька",
+        "егор" to "егорка",
+        "иван" to "ваня ванька ванечка ванюша",
+        "игорь" to "игорёк",
+        "илья" to "илюша илюха",
+        "константин" to "костя костик",
+        "леонид" to "лёня",
+        "лев" to "лёва",
+        "максим" to "макс",
+        "михаил" to "миша мишка мишаня мишенька",
+        "никита" to "никитка",
+        "николай" to "коля колька николаша коленька",
+        "олег" to "олежек",
+        "павел" to "паша павлик пашка",
+        "пётр" to "петя петька петруша",
+        "роман" to "рома ромка",
+        "сергей" to "серёжа серёга серёжка",
+        "станислав" to "стас",
+        "степан" to "стёпа",
+        "тимофей" to "тима",
+        "фёдор" to "федя федька",
+        "юрий" to "юра юрка",
+        "яков" to "яша",
+        "семён" to "сёма",
+        "аркадий" to "аркаша",
+        "эдуард" to "эдик",
+        "ярослав" to "ярик",
+        "кирилл" to "кирюша",
+        "антон" to "антоша",
+        "артём" to "тёма",
+        "денис" to "дениска",
+        "глеб" to "глебушка",
+        "герман" to "гера",
+        "александра" to "саша шура сашенька",
+        "анастасия" to "настя настенька",
+        "настасья" to "настя настенька",
+        "анна" to "аня анечка нюра аннушка нюша",
+        "валентина" to "валя",
+        "вера" to "верочка",
+        "виктория" to "вика",
+        "галина" to "галя",
+        "дарья" to "даша дашенька",
+        "евгения" to "женя",
+        "екатерина" to "катя катька катюша катенька",
+        "елена" to "лена леночка",
+        "елизавета" to "лиза лизонька",
+        "ирина" to "ира ирочка",
+        "ксения" to "ксюша",
+        "любовь" to "люба",
+        "людмила" to "люда мила",
+        "маргарита" to "рита",
+        "марина" to "мариша",
+        "мария" to "маша машенька маруся машка",
+        "надежда" to "надя наденька",
+        "наталья" to "наташа",
+        "наталия" to "наташа",
+        "нина" to "ниночка",
+        "ольга" to "оля оленька",
+        "полина" to "поля",
+        "светлана" to "света",
+        "софья" to "соня",
+        "софия" to "соня",
+        "тамара" to "тома",
+        "татьяна" to "таня танечка танюша",
+        "юлия" to "юля",
+        "зинаида" to "зина",
+        "лидия" to "лида",
+        "евдокия" to "дуня",
+        "вероника" to "ника",
+        "алёна" to "алёнка",
+        "варвара" to "варя",
+        "кристина" to "кристи",
+        )) for (f in forms.split(' ')) m.getOrPut(f) { HashSet() }.add(full)
+        m
+    }
+
+    private val fullNames: Set<String> by lazy { shortNames.values.flatten().toSet() }
+
+    /** The full names [n] may stand for ("саша" → александр, александра); written with е or ё. */
+    private fun fullsOf(n: String): Set<String> {
+        val r = HashSet<String>()
+        for (c in setOf(n, n.replace('е', 'ё'))) {
+            shortNames[c]?.let { r.addAll(it) }
+            if (c in fullNames) r.add(c)
+        }
+        return r
+    }
+
+    /** May [a] and [b] be one person's names ("Саша" and "Александр", "Лёша" and "Алёша")? */
+    private fun sameFirstName(a: String, b: String): Boolean {
+        val x = a.lowercase(); val y = b.lowercase()
+        if (x == y) return false
+        val fx = fullsOf(x)
+        return fx.isNotEmpty() && fullsOf(y).any { it in fx }
+    }
+
+    const val FORCE_NARRATOR = "#narrator"
+    const val FORCE_UNKNOWN = "#unknown"
+
+    /** Normalised key of a line for corrections: letters and digits only. */
+    fun speechKey(line: String): String =
+        line.lowercase().replace('ё', 'е').replace(Regex("[^а-яa-z0-9]+"), " ").trim().take(80)
+
+    /** Case forms of a Russian name: "Пётр" → петра, петру, петром, петре; "Маша" → маши, машу… */
+    fun nameForms(name: String, female: Boolean?): Set<String> {
+        val n = name.lowercase().replace('ё', 'е')
+        val forms = linkedSetOf(n)
+        val vowels = "аеиоуыэюя"
+        when {
+            n.first().isDigit() -> if (n.endsWith("й")) {
+                val st = n.dropLast(1); forms += listOf(st + "го", st + "му", st + "м")
+            }
+            n.endsWith("ия") -> { val st = n.dropLast(1); forms += listOf(st + "и", st + "ю", st + "ей") }
+            n.endsWith("а") && n.length > 2 -> {
+                val st = n.dropLast(1); val c = st.last()
+                forms += listOf(st + (if (c in "гкхжшщч") "и" else "ы"), st + "е", st + "у", st + "ою",
+                    st + (if (c in "жшщчц") "ей" else "ой"))
+            }
+            n.endsWith("я") && n.length > 2 -> { val st = n.dropLast(1); forms += listOf(st + "и", st + "е", st + "ю", st + "ей") }
+            n.endsWith("й") -> { val st = n.dropLast(1); forms += listOf(st + "я", st + "ю", st + "ем", st + "е") }
+            n.endsWith("ь") -> {
+                val st = n.dropLast(1)
+                forms += if (female == true) listOf(st + "и", st + "ью") else listOf(st + "я", st + "ю", st + "ем", st + "е")
+            }
+            n.last() !in vowels -> {
+                // fleeting vowel: Павел → Павла, Ленивец → Ленивца («Где-то там…»: "Ленивца" was a character of its own)
+                val stems = linkedSetOf(n)
+                if (n.length > 4 && Regex(".*[^аеиоуыэюя](ел|ек|ок|ец)$").matches(n)) stems += n.dropLast(2) + n.last()
+                for (st in stems) forms += listOf(st + "а", st + "у", st + (if (st.last() in "цжшчщ") "ем" else "ом"), st + "е")
+            }
+        }
+        return forms
+    }
+
+    data class Piece(val text: String, val role: Role, val speaker: String?, val manner: Manner)
+
+    private enum class G { M, F }
+
+    // ------------------------------------------------------------- lexicons
+
+    private val dashes = setOf('—', '–', '-', '―')
+    private val SPACED_DASH = Regex("""[\s\u00A0\u202F][—–―-][\s\u00A0\u202F]""")
+    /** A dash opening a line inside a paragraph: after ":" or the end of a sentence, before a capital or a quote. */
+    private val INNER_DASH_LINE = Regex("""(?<=[:.!?…])[\s\u00A0\u202F]+[—–―][\s\u00A0\u202F]+(?=[«"„“\p{Lu}])""")
+    private val WORD = Regex("""\d+[‑-][а-яё]+|[А-Яа-яЁё]+""")
+    /** After a speech verb, the one spoken to: "сказал я Ленивцу", "ответила ему Маше", "обратился к Глену". */
+    private val TO_WHOM = Regex("""(?:[Сс]казал|[Оо]тветил|[Сс]просил|[Бб]росил|[Кк]рикнул|[Пп]рошептал|[Шш]епнул|[Пп]редложил|[Оо]братил(?:ся|ась))(?:а|и)?\s+(?:я\s+|он\s+|она\s+|мы\s+)?(?:к\s+)?([А-ЯЁ][а-яё]+)""")
+    /** "начал свой рассказ", "стала рассказывать": the speaker's next line is the story going on. */
+    private val STORY_START = Regex("""(?iu)(?:начал[аи]?|продолжил[аи]?)\s+(?:сво[йёю]\s+)?(?:рассказ|повествование|историю)|(?:стал[аи]?|начал[аи]?)\s+рассказывать""")
+    /** «…» introduced as someone's thought or voice: "мысль выглянувшего Ленивца:", "голос Глена:". */
+    private val THOUGHT_OF = Regex("""(?:[Мм]ысл[ьи]|[Гг]олос|[Сс]лова|[Оо]твет|[Вв]опрос)(?:\s+[а-яё\-]+){0,8}\s+([А-ЯЁ][а-яё]+)\s*:\s*$""")
+    /** Titles that stand before a name ("начальник Рафт"): such a speaker is that person in the chapter. */
+    private val TITLES = setOf("начальник", "командир", "капитан", "ректор", "маг", "страж", "стражник", "лейтенант", "генерал",
+        "сержант", "офицер", "профессор", "доктор", "учитель", "мастер", "старейшина", "вождь", "король", "королева", "князь",
+        "княгиня", "граф", "графиня", "барон", "баронесса", "лорд", "леди", "господин", "госпожа", "майор", "полковник", "адмирал",
+        "мистер", "миссис", "мисс", "сэр", "мсье", "месье", "мадам", "мадемуазель", "фрау", "герр", "пан", "пани", "синьор", "синьора")
+    /** A speaker telling his name: «Зовут меня Лениавес», «меня зовут Глен», «моё имя — Рох». */
+    private val SELF_NAME = Regex("""(?iu:меня\s+зовут|зовут\s+меня|мо[её]\s+имя|имя\s+мо[её])\s*[-–—:,]?\s*([А-ЯЁ][а-яё]+)""")
+    /** «Я — Глен» at the start of a line (only a name already known counts). */
+    private val SELF_I_AM = Regex("""^\s*[-–—]?\s*(?:Я|я)\s*[-–—]\s*([А-ЯЁ][а-яё]+)""")
+
+    /** First-person narration: "— … — уточнил я". The hero speaks in the narrator's voice. */
+    const val HERO = "Я"
+
+    /** The voice in the hero's head: a neural net, a system, notifications ("В голове прозвучало: «…»"). */
+    const val SYSTEM = "Голос в голове"
+
+    /** Words that introduce a message heard in the head or shown to the hero. */
+    private val systemCues = listOf("в голове", "прозвучал", "прозвучало", "раздал", "голос", "высветил",
+        "всплыл", "сообщени", "уведомлени", "надпись", "появилось", "пришло", "пискнул", "звякнул")
+
+    /** Content of a bare «…» message that reads like a system report rather than the hero's thought. */
+    private val systemContent = Regex(
+        // (?<![а-яё]) instead of \b: Java's \b does not see Cyrillic letters as word characters
+        """(?iu)(?<![а-яё])(подключен|инсталлирован|вероятност|опци|операци|выполнено|принято|завершен|""" +
+            """уровень|модул|модел|параметр|загрузк|доступ|обнаружен|активирован|установлен|ошибк|предупреждени|""" +
+            """пользовател|погрешност)|%"""
+    )
+    // "я/мне/мой" — only the hero; "мы/нам" is also how the voices in his head speak of themselves
+    private val firstPersonSingular = Regex("""(?iu)(^|[^а-яё])(я|мне|меня|мой|моя|моё|мои)([^а-яё]|$)""")
+    private val firstPersonThought = Regex("""(?iu)(^|[^а-яё])(я|мне|меня|мой|моя|моё|мои|мы|нам|нас)([^а-яё]|$)""")
+
+    private val notNames = setOf(
+        "Он", "Она", "Они", "Оно", "Я", "Мы", "Вы", "Ты", "Это", "Тот", "Та", "То", "Те", "Там", "Тут",
+        "Но", "И", "А", "Да", "Нет", "Не", "Ну", "Вот", "Так", "Как", "Что", "Кто", "Где", "Когда", "Потом",
+        "Затем", "Тогда", "Его", "Её", "Ее", "Их", "Ему", "Ей", "Им", "Все", "Всё", "Уже", "Ещё", "Еще",
+        "После", "Перед", "Через", "Голос", "Господин", "Госпожа", "Здесь", "Теперь", "Сейчас", "Почему",
+        "Зачем", "Если", "Хорошо", "Ладно", "Конечно", "Спасибо", "Привет", "Слушай", "Смотри", "Мне", "Меня",
+        "Наконец", "Вдруг", "Сначала", "Вероятно", "Видимо", "Похоже", "Кстати", "Впрочем", "Однако",
+        "Опять", "Снова", "Внезапно", "Неожиданно", "Вскоре", "Сразу", "Тотчас", "Тут", "Следом", "Затем"
+    )
+
+    /** Common diminutives → full names (both directions are tried when matching people). */
+    private val diminutives: Map<String, List<String>> = mapOf(
+        "петя" to listOf("пётр"), "маша" to listOf("мария"), "маруся" to listOf("мария"), "саша" to listOf("александр", "александра"),
+        "шура" to listOf("александр", "александра"), "ваня" to listOf("иван"), "коля" to listOf("николай"), "дима" to listOf("дмитрий"),
+        "митя" to listOf("дмитрий"), "миша" to listOf("михаил"), "лёша" to listOf("алексей"), "алёша" to listOf("алексей"),
+        "серёжа" to listOf("сергей"), "андрюша" to listOf("андрей"), "наташа" to listOf("наталья", "наталия"),
+        "катя" to listOf("екатерина"), "лена" to listOf("елена"), "оля" to listOf("ольга"), "таня" to listOf("татьяна"),
+        "женя" to listOf("евгений", "евгения"), "вова" to listOf("владимир"), "володя" to listOf("владимир"),
+        "юра" to listOf("юрий"), "костя" to listOf("константин"), "паша" to listOf("павел"), "гриша" to listOf("григорий"),
+        "федя" to listOf("фёдор"), "витя" to listOf("виктор"), "толя" to listOf("анатолий"), "боря" to listOf("борис"),
+        "слава" to listOf("вячеслав", "ярослав", "святослав"), "света" to listOf("светлана"), "аня" to listOf("анна"),
+        "надя" to listOf("надежда"), "люба" to listOf("любовь"), "галя" to listOf("галина"), "валя" to listOf("валентина", "валентин"),
+        "зина" to listOf("зинаида"), "даша" to listOf("дарья"), "настя" to listOf("анастасия"), "ира" to listOf("ирина"),
+        "юля" to listOf("юлия"), "ксюша" to listOf("ксения"), "соня" to listOf("софья", "софия"), "поля" to listOf("полина"),
+        "лиза" to listOf("елизавета"), "вика" to listOf("виктория"), "кира" to listOf("кирилл"), "стёпа" to listOf("степан"),
+        "тёма" to listOf("артём"), "рома" to listOf("роман"), "гена" to listOf("геннадий"), "жора" to listOf("георгий"),
+        "гоша" to listOf("георгий", "игорь"), "вася" to listOf("василий"), "лёва" to listOf("лев"), "сеня" to listOf("семён", "арсений"),
+        "макс" to listOf("максим"), "тоня" to listOf("антонина", "антон"), "люда" to listOf("людмила"), "мила" to listOf("людмила"),
+        "вера" to listOf("вероника"), "лара" to listOf("лариса"), "рита" to listOf("маргарита"), "нюра" to listOf("анна"),
+        "дуня" to listOf("евдокия"), "фрося" to listOf("ефросинья"), "тима" to listOf("тимофей", "тимур"), "яша" to listOf("яков"),
+        "миля" to listOf("эмилия"), "эля" to listOf("элеонора", "эльвира"), "лёня" to listOf("леонид"), "веня" to listOf("вениамин")
+    )
+
+    /** Ranks and titles: "— Лейтенант, вы готовы?" addresses someone by rank, not by name. */
+    private val titles = setOf(
+        "лейтенант", "капитан", "майор", "полковник", "генерал", "сержант", "рядовой", "командир", "адмирал",
+        "товарищ", "господин", "госпожа", "сэр", "мадам", "доктор", "профессор", "начальник", "шеф", "босс",
+        "ваше", "милорд", "миледи", "сударь", "сударыня", "барин", "барыня", "отец", "батюшка", "матушка", "старик",
+        "хозяин", "хозяйка", "сенатор", "советник", "магистр", "мастер"
+    )
+
+    /** Capitalised words that open a line with a comma but are not someone's name. */
+    private val notVocatives = setOf(
+        "Господи", "Боже", "Чёрт", "Черт", "Блин", "Эй", "Ой", "Ах", "Эх", "Ох", "Слушайте", "Послушай",
+        "Послушайте", "Знаешь", "Знаете", "Понимаешь", "Понимаете", "Извини", "Извините", "Простите",
+        "Прости", "Пожалуйста", "Спасибо", "Ладно", "Значит", "Короче", "Кстати", "Впрочем", "Наверное",
+        "Конечно", "Нет", "Да", "Ага", "Угу", "Ну", "Итак", "Так", "Вот", "Здравствуй", "Здравствуйте",
+        "Привет", "Пока", "Товарищи", "Друзья", "Ребята", "Господа", "Дамы", "Мама", "Папа", "Сынок", "Дочка"
+    )
+
+    /**
+     * Role nouns that speak: the ones below and the book's own (a race, a kind of creature —
+     * «ответил корнол», «спросил оборотень»: found in the text, see [bookNouns]).
+     */
+    private val speakerNouns: Map<String, G> get() = nounsTL.get() ?: BASE_NOUNS
+    private val nounsTL = ThreadLocal<Map<String, G>>()
+
+    /** Honorifics of translated novels: «сказал мистер Беннет» names Беннет, not «мистер». */
+    private val HONOR_M = setOf("мистер", "сэр", "лорд", "мсье", "месье", "герр", "пан", "синьор", "сеньор", "милорд")
+    private val HONOR_F = setOf("миссис", "мисс", "леди", "мадам", "мадемуазель", "фрау", "пани", "синьора", "сеньора", "синьорина", "миледи")
+    private val HONOR = HONOR_M + HONOR_F
+    private val HONOR_NAME = Regex("""(?<![А-Яа-яЁё])((?iu:""" + HONOR.joinToString("|") + """))\s+([А-ЯЁ][а-яё]+)(?![А-Яа-яЁё])""")
+    /** Surnames a family shares («мистер Беннет», «миссис Беннет», «мисс Беннет»): there the title is part of the name. */
+    private val familyTL = ThreadLocal<Set<String>>()
+    /** A book told in the third person: nobody there is «я» (a letter or a story inside it made 80 lines the hero's). */
+    private val thirdTL = ThreadLocal<Boolean>()
+    private val NARR_I = Regex("""(?iu)(^|[^а-яё])(я|мне|меня|мной)([^а-яё]|$)""")
+
+    /**
+     * Who tells the text. [THIRD]: told in the third person; [UNKNOWN]: in the first, but its sex is not
+     * clear; [MALE] / [FEMALE]: the teller's sex («я пошла», «сказала я», «я уверена» in the narration);
+     * [MIXED]: told by several people (letters, chapters by different tellers).
+     */
+    enum class Teller { THIRD, UNKNOWN, MALE, FEMALE, MIXED }
+
+    private const val TL = "а-яё"
+    private val I_THEN = Regex("(?iu)(?<![$TL])я\\s+(?:(?:не|ни|тоже|уже|уж|ещё|еще|же|ведь|вдруг|только|даже|сразу|так|всё|все|и|лишь|наконец|снова|опять|" +
+        "просто|почти|давно|долго|сначала|потом|никогда|всегда|часто|быстро|молча|тихо|бы|было|невольно)\\s+){0,2}([$TL]+)(?![$TL])")
+    private val THEN_I = Regex("(?iu)(?<![$TL])([$TL]{3,})\\s+я(?![$TL])")
+    private val I_F = setOf("сама", "рада", "должна", "готова", "уверена", "согласна", "одна", "виновата", "знакома", "больна", "счастлива",
+        "вынуждена", "обязана", "довольна", "способна", "намерена", "поражена", "удивлена", "испугана", "влюблена", "благодарна")
+    private val I_M = setOf("сам", "рад", "должен", "готов", "уверен", "согласен", "один", "виноват", "знаком", "болен", "счастлив",
+        "вынужден", "обязан", "доволен", "способен", "намерен", "поражён", "поражен", "удивлён", "удивлен", "испуган", "влюблён", "влюблен", "благодарен",
+        "мог", "смог", "помог", "лёг", "лег", "шёл", "пошёл", "вошёл", "ушёл", "пришёл", "нашёл", "подошёл", "нёс", "вёз", "рос", "вырос",
+        "умер", "замер", "запер", "привык", "достиг", "проник", "исчез", "погиб", "замёрз", "промок")
+    private val I_NOT = setOf("пол", "стол", "зал", "бал", "вол", "осел", "посол", "угол", "орёл", "котёл", "мол", "ил", "дол", "тыл", "пыл",
+        "сила", "мила", "игла", "пчела", "скала", "мгла", "стрела", "смола", "метла", "зола", "дела", "тела", "села", "крыла", "зла")
+
+    /** «я» + [w]: 1 a woman, -1 a man, 0 not told; [after]: [w] stands after «я» (past tense or a short adjective), else before it (past tense only). */
+    private fun iSex(w0: String, after: Boolean): Int {
+        val w = w0.lowercase()
+        if (w in I_NOT) return 0
+        if (after && w in I_F) return 1
+        if (after && w in I_M) return -1
+        if (w.endsWith("лась") || (w.endsWith("ла") && w.length > 3)) return 1
+        if (w.endsWith("лся") || (w.endsWith("л") && w.length > 2)) return -1
+        return 0
+    }
+
+    /**
+     * Who tells [text]: the narration (not the speech) of a first-person book (≥ 12% of its paragraphs with
+     * «я/мне/меня») and the sex «я» has there — a man's or a woman's in three of four signs or more.
+     */
+    fun teller(text: String): Teller {
+        val narr = text.split('\n').filter { it.isNotBlank() && it.trimStart().firstOrNull()?.let { c -> c in dashes || c == '«' || c == '"' || c == '„' } != true }
+            .map { it.replace(Regex("""«[^»]*»|"[^"]*"|„[^“]*“"""), " ") }
+        if (narr.size < 15 || narr.count { NARR_I.containsMatchIn(it) } * 100 < narr.size * 12) return Teller.THIRD
+        var f = 0; var m = 0
+        for (p in narr) {
+            // (one matcher each: on Android every findAll() match is a new matcher with its own copy of the text)
+            val a = I_THEN.toPattern().matcher(p)
+            while (a.find()) when (iSex(a.group(1), true)) { 1 -> f++; -1 -> m++ }
+            val b = THEN_I.toPattern().matcher(p)
+            while (b.find()) when (iSex(b.group(1), false)) { 1 -> f++; -1 -> m++ }
+        }
+        return when {
+            f + m < 4 -> Teller.UNKNOWN
+            f >= 3 * m -> Teller.FEMALE
+            m >= 3 * f -> Teller.MALE
+            else -> Teller.MIXED
+        }
+    }
+
+    /** The name at [k] with its honorific: «Беннет», or «Миссис Беннет» when the surname is a family's. */
+    private fun honored(head: List<String>, k: Int): String? {
+        val t = head.getOrNull(k - 1)?.lowercase() ?: return null
+        if (t !in HONOR) return null
+        val w = head.getOrNull(k) ?: return null
+        return if (w in (familyTL.get() ?: emptySet<String>())) t.replaceFirstChar { it.uppercase() } + " " + w else w
+    }
+    /** The book's own speaker nouns of this analysis (not [BASE_NOUNS]). */
+    private val ownNounsTL = ThreadLocal<Set<String>>()
+
+    /** Role nouns that speak, with grammatical gender (the voice follows it). */
+    private val BASE_NOUNS: Map<String, G> = mapOf(
+        "старик" to G.M, "старуха" to G.F, "мальчик" to G.M, "девочка" to G.F, "девушка" to G.F,
+        "женщина" to G.F, "мужчина" to G.M, "парень" to G.M, "юноша" to G.M, "ребёнок" to G.M,
+        "капитан" to G.M, "доктор" to G.M, "врач" to G.M, "солдат" to G.M, "командир" to G.M,
+        "офицер" to G.M, "незнакомец" to G.M, "незнакомка" to G.F, "хозяин" to G.M, "хозяйка" to G.F,
+        "бабушка" to G.F, "дедушка" to G.M, "дед" to G.M, "бабка" to G.F, "мать" to G.F, "отец" to G.M,
+        "мама" to G.F, "папа" to G.M, "король" to G.M, "королева" to G.F, "принц" to G.M,
+        "принцесса" to G.F, "ведьма" to G.F, "маг" to G.M, "стражник" to G.M, "страж" to G.M,
+        "продавец" to G.M, "продавщица" to G.F, "водитель" to G.M, "секретарь" to G.M,
+        "секретарша" to G.F, "официант" to G.M, "официантка" to G.F, "начальник" to G.M,
+        "профессор" to G.M, "учитель" to G.M, "учительница" to G.F, "инженер" to G.M, "пилот" to G.M,
+        "компьютер" to G.M, "робот" to G.M, "андроид" to G.M, "бот" to G.M, "автомат" to G.M,
+        "система" to G.F, "машина" to G.F, "нейросеть" to G.F, "программа" to G.F,
+        "ассистент" to G.M, "помощник" to G.M, "помощница" to G.F, "диспетчер" to G.M,
+        "искин" to G.M, "дроид" to G.M, "дрон" to G.M, "меддроид" to G.M, "сеть" to G.F, "интеллект" to G.M
+    )
+
+    private val ageOld = setOf("старик", "старуха", "бабушка", "дедушка", "дед", "бабка")
+    private val ageYoung = setOf("мальчик", "девочка", "ребёнок")
+    private val machines = setOf("компьютер", "робот", "андроид", "бот", "автомат", "система", "машина",
+        "нейросеть", "программа", "ассистент", "искин", "дроид", "дрон", "меддроид", "сеть", "интеллект")
+
+    /** Stems in the author words that tell how a line is said. */
+    private val mannerStems: List<Pair<String, Manner>> = listOf(
+        "прошепт" to Manner.WHISPER, "шепну" to Manner.WHISPER, "шепча" to Manner.WHISPER,
+        "вполголоса" to Manner.WHISPER, "еле слышно" to Manner.WHISPER, "тихо" to Manner.WHISPER,
+        "прошелест" to Manner.WHISPER,
+        "крикну" to Manner.SHOUT, "закрича" to Manner.SHOUT, "заор" to Manner.SHOUT, "рявкну" to Manner.SHOUT,
+        "воскликну" to Manner.SHOUT, "выкрикну" to Manner.SHOUT, "взрев" to Manner.SHOUT, "гаркну" to Manner.SHOUT,
+        "завопи" to Manner.SHOUT, "громко" to Manner.SHOUT,
+        "выпали" to Manner.FAST, "затарато" to Manner.FAST, "протарато" to Manner.FAST,
+        "скороговоркой" to Manner.FAST, "быстро" to Manner.FAST, "торопливо" to Manner.FAST,
+        "протяну" to Manner.SLOW, "медленно" to Manner.SLOW, "неторопливо" to Manner.SLOW,
+        "растягивая" to Manner.SLOW, "нараспев" to Manner.SLOW
+    )
+
+    private val notVerbs = setOf(
+        "дела", "тела", "пола", "стола", "мела", "мила", "сила", "вила", "кила", "мгла", "игла", "стрела",
+        "смола", "школа", "пчела", "крыла", "скула", "мул", "пол", "стол", "вол", "тыл", "ил", "зал", "бал",
+        "вал", "кал", "мел", "угол", "орёл", "орел", "посол", "котёл", "котел", "дятел", "пепел"
+    )
+
+    // ------------------------------------------------------------------ API
+
+    fun analyze(text: String, prior: Prior? = null): Result {
+        val proper = MID_CAPS.findAll(text).map { normHyphen(it.value) }.toHashSet()
+        properTL.set(proper)
+        // stems of those names: "Анита" seen only at sentence starts, but "Аните", "Аниту" inside them
+        stemTL.set(proper.filter { it.length >= 4 }.flatMap { listOf(it.dropLast(1), it.dropLast(2)) }.toHashSet())
+        // the book's own speaker nouns: found in this text, and the whole book's (a chapter may show
+        // «ответил корнол» once — the book shows it forty times)
+        val own = HashMap(bookNouns(text))
+        prior?.genders?.forEach { (n, r) ->
+            if (n.length >= 4 && n[0].isLowerCase() && n !in BASE_NOUNS && n !in own)
+                when (r) { Role.MALE -> own[n] = G.M; Role.FEMALE -> own[n] = G.F; else -> {} }
+        }
+        nounsTL.set(if (own.isEmpty()) BASE_NOUNS else BASE_NOUNS + own)
+        ownNounsTL.set(own.keys)
+        // a surname under two or more honorifics (each seen twice) is a family's: «мистер Беннет» and «миссис Беннет» are two people
+        val titlesOf = HashMap<String, HashMap<String, Int>>()
+        for (m in HONOR_NAME.findAll(text)) titlesOf.getOrPut(m.groupValues[2]) { HashMap() }.merge(m.groupValues[1].lowercase(), 1, Int::plus)
+        val fam = titlesOf.filter { (_, t) -> t.count { it.value >= 2 } >= 2 }.keys.toHashSet()
+        prior?.genders?.keys?.forEach { n -> val p = n.split(' '); if (p.size == 2 && p[0].lowercase() in HONOR) fam += p[1] }
+        familyTL.set(fam)
+        // the share of narration paragraphs with «я/мне/меня»: a first-person book has 0.4–0.9, a third-person one
+        // 0.00–0.07 (letters, a told story — «Пять поросят» 0.2); a chapter with little narration takes the whole book's word
+        val narr = text.split('\n').filter { it.isNotBlank() && it.trimStart().firstOrNull()?.let { c -> c in dashes || c == '«' || c == '"' || c == '„' } != true }
+            .map { it.replace(Regex("""«[^»]*»|"[^"]*"|„[^“]*“"""), " ") }
+        val narrI = narr.count { NARR_I.containsMatchIn(it) }
+        thirdTL.set(when {
+            prior?.genders?.containsKey(HERO) == true -> false
+            narr.size >= 15 -> narrI * 100 < narr.size * 12
+            prior != null -> prior.genders.isNotEmpty()
+            else -> false
+        })
+        try { return analyzeImpl(text, prior) } finally { properTL.remove(); stemTL.remove(); nounsTL.remove(); ownNounsTL.remove(); familyTL.remove(); thirdTL.remove() }
+    }
+
+    /** The stems a noun's case forms are built on: "корнол", "оборотен" and "оборотн" (оборотня), "старец"/"старц". */
+    private fun stemsOf(w: String): List<String> {
+        val stem = if (w.last() in "аяьй") w.dropLast(1) else w
+        val out = arrayListOf(stem)
+        // a vowel that drops out: оборотень — оборотня, старец — старца, огонёк — огонька
+        if (stem.length >= 4 && stem[stem.length - 2] in "еоё" && stem.last() !in "аеёиоуыэюя")
+            out.add(stem.dropLast(2) + stem.last())
+        return out
+    }
+
+    /** "ответил корнол", "спросила эльфийка": a speech verb and the one who speaks. */
+    private val NOUN_AFTER_VERB = Regex("""(?<![а-яё])(сказал|ответил|спросил|проговорил|прошептал|пробормотал|буркнул|заметил|""" +
+        """воскликнул|добавил|пояснил|уточнил|возразил|согласился|согласилась|хмыкнул|продолжил|поинтересовался|поинтересовалась|""" +
+        """отозвался|отозвалась|подтвердил|сообщил|протянул|объяснил|предложил|прошипел|рявкнул|крикнул|закричал|""" +
+        """усмехнулся|усмехнулась|вздохнул|кивнул|прокомментировал|предупредил|откликнулся|откликнулась|заявил|""" +
+        """проворчал|огрызнулся|огрызнулась|ухмыльнулся|ухмыльнулась|улыбнулся|улыбнулась|рассмеялся|рассмеялась|""" +
+        """фыркнул|потребовал|напомнил|признался|призналась|удивился|удивилась|откликнулся|констатировал|прорычал|""" +
+        """прохрипел|простонал|прокричал|выкрикнул|произн[её]с|произнесла)(а)?\s+([а-яё]{4,})(?=[\s,.!?:;…»]|$)""")
+
+    /** Words after a speech verb that are not who speaks. */
+    private val NOT_NOUNS = setOf("вдруг", "наконец", "вслух", "снова", "опять", "сразу", "тоже", "также", "потом", "затем",
+        "уже", "ещё", "еще", "лишь", "только", "почти", "даже", "вновь", "сейчас", "теперь", "тогда", "этот", "свой", "своим",
+        "сама", "один", "одна", "каждый", "никто", "кто-то", "голос", "мне", "нам", "вам", "ему", "тихо", "громко",
+        "себе", "сквозь", "через", "после", "перед", "между", "всем", "всех", "всего", "чуть", "едва", "негромко",
+        "вполголоса", "шёпотом", "шепотом", "мрачно", "весело", "грустно", "задумчиво", "спокойно", "строго", "резко",
+        "медленно", "быстро", "уверенно", "серьёзно", "серьезно", "нехотя", "немного", "очень", "слегка", "довольно")
+
+    /**
+     * The book's own speaker nouns (not in [BASE_NOUNS]): a lowercase word standing as the subject
+     * after a speech verb three times or more, and a noun — the text has its case forms too
+     * («корнола», «корнолу»; «оборотня»). Its sex: the verb's ("ответил" / "ответила").
+     */
+    private fun bookNouns(text: String): Map<String, G> {
+        val seen = HashMap<String, IntArray>()
+        for (m in NOUN_AFTER_VERB.findAll(text)) {
+            val w = m.groupValues[3]
+            if (w in BASE_NOUNS || w in NOT_NOUNS || w in SMALL_WORDS || w in SOMEONE || w in HONOR) continue
+            // adjectives, adverbs, infinitives, reflexives, gerunds: not who speaks
+            if (listOf("ый", "ий", "ой", "ая", "яя", "ое", "ее", "ые", "ие", "ых", "их", "ть", "ся", "сь",
+                    "ти", "ло", "ли", "но", "ко", "го", "ши", "ву", "ую", "юю", "ым", "им").any { w.endsWith(it) }) continue
+            val c = seen.getOrPut(w) { IntArray(2) }
+            if (m.groupValues[2].isEmpty() && !m.groupValues[1].endsWith("ась") && !m.groupValues[1].endsWith("ла")) c[0]++ else c[1]++
+        }
+        val out = HashMap<String, G>()
+        for ((w, c) in seen) {
+            if (c[0] + c[1] < 3) continue
+            // a noun: its case forms are in the text ("наконец", "вдруг" have none)
+            val ends = when {
+                w.endsWith("а") -> listOf("ы", "и", "е", "у", "ой")
+                w.endsWith("я") -> listOf("и", "е", "ю", "ей")
+                w.endsWith("ь") || w.endsWith("й") -> listOf("я", "ю", "ем", "е", "и", "ей")
+                else -> listOf("а", "у", "ом", "е", "ы", "ов")
+            }
+            val forms = Regex("(?<![а-яё])(?:" + stemsOf(w).joinToString("|") { Regex.escape(it) } + ")(" + ends.joinToString("|") + ")(?![а-яё])", RegexOption.IGNORE_CASE)
+                .findAll(text).take(3).count()
+            if (forms < 2) continue
+            out[w] = if (c[1] > c[0]) G.F else G.M
+        }
+        return out
+    }
+
+    private fun analyzeImpl(text: String, prior: Prior?): Result {
+        val third = thirdTL.get() == true
+        val paragraphs = paragraphRanges(text)
+        val parsed = paragraphs.map { (s, e) -> parseParagraph(text, s, e) }
+
+        // pass 1: learn names' genders from author words with a gendered verb
+        val nameVotes = HashMap<String, IntArray>()
+        for (p in parsed) if (p.speech.isNotEmpty()) for ((a, b) in authorPieces(text, p)) {
+            val h = hint(words(text, a, b))
+            val g = h.verbGender ?: continue
+            val n = h.name ?: continue
+            val c = nameVotes.getOrPut(n) { IntArray(2) }
+            if (g == G.M) c[0]++ else c[1]++
+        }
+        // ...and from the narration: "Капитан Рокута протянул…", "Анита посмотрела…" — the name
+        // just before its verb, and a title before a name ("капитан Рокута" is a man though
+        // "-а" names are mostly women's). Without this a man named Рокута got a woman's voice.
+        for (p in parsed) {
+            val ws = words(text, p.start, p.end)
+            for (i in ws.indices) {
+                val w = ws[i]
+                if (!isNameWord(w) || !isProper(w) || pastGender(w, true) != null) continue
+                val before = ws.getOrNull(i - 1)?.lowercase()
+                if (before != null && before in prepositions) continue
+                // only names already seen speaking, or with a title: the narration must not
+                // turn "Пока", "Объект" into characters
+                val titled = before in maleTitles || before in femaleTitles
+                if (w !in nameVotes && !titled) continue
+                val c = nameVotes.getOrPut(w) { IntArray(2) }
+                when (before) {
+                    in maleTitles -> c[0] += 2
+                    in femaleTitles -> c[1] += 2
+                }
+                // the verb right after the name (one adverb may stand between: "Анита тихо сказала")
+                val g = pastGender(ws.getOrNull(i + 1) ?: "", false) ?: pastGender(ws.getOrNull(i + 2) ?: "", false)
+                if (g == G.M) c[0]++ else if (g == G.F) c[1]++
+            }
+        }
+        val nameGender = HashMap<String, G>()
+        for ((n, c) in nameVotes) {
+            if (c[0] > c[1] * 2) nameGender[n] = G.M else if (c[1] > c[0] * 2) nameGender[n] = G.F
+            // «Миссис Беннет»: the title tells
+            n.split(' ').takeIf { it.size == 2 }?.get(0)?.lowercase()?.let { t ->
+                if (t in HONOR_M) nameGender[n] = G.M else if (t in HONOR_F) nameGender[n] = G.F
+            }
+        }
+        // the whole book's genders win over this chapter's: one chapter may have a single
+        // "сказала" by mistake, the book has all of them (a man must not turn into a woman for a chapter)
+        prior?.genders?.forEach { (n, r) ->
+            when (r) { Role.MALE -> nameGender[n] = G.M; Role.FEMALE -> nameGender[n] = G.F; else -> {} }
+        }
+        // every case form of every known name → the name ("Петра", "Петру" → "Пётр")
+        val nameOf = HashMap<String, String>()
+        for ((n, g) in nameGender) if ((n.first().isUpperCase() || n.first().isDigit()) && n != HERO && n != SYSTEM) {
+            for (f in nameForms(n, g == G.F)) nameOf.putIfAbsent(f, n)
+        }
+        fun canon(w: String): String? = nameOf[normHyphen(w).lowercase().replace('ё', 'е')]
+        val heroNames = HashSet<String>()              // the hero's own name, if the others use it
+        val aliasOut = LinkedHashMap<String, String>() // merges found here (Result.aliases)
+        // a case form other than the name itself ("Лорка", "Аггиусу"): never the subject
+        fun oblique(w: String): Boolean {
+            val c = canon(w) ?: return false
+            val lw = normHyphen(w).lowercase().replace('ё', 'е')
+            if (c == HERO) return heroNames.none { it.lowercase().replace('ё', 'е') == lw }
+            return c.lowercase().replace('ё', 'е') != lw
+        }
+        fun wordGender(w: String): G? = canon(w)?.let { if (it == HERO) null else nameGender[it] } ?: speakerNouns[w.lowercase()]
+        fun hintAt(ws: List<String>): Hint = hint(ws, ::oblique, ::wordGender)
+        val seenSpeakers = HashSet<String>()           // everyone who has spoken so far
+        // "мать" and "мама", "дочь" and "девочка": one person under two role words
+        fun samePerson(a: String?, b: String?): Boolean = a != null && b != null &&
+            (a == b || kinVocatives.values.any { a in it && b in it })
+        // one name for one person: "мама" after "мать" has spoken is "мать"
+        fun canonKin(x: String): String = kinCanon[x] ?: x
+        // "— Да, мам, …" with nobody named: the child of the scene speaks (and to "доченька" — a parent)
+        fun kinComplement(addr: String?): String? {
+            if (addr == null) return null
+            val parents = listOf("мать", "мама", "отец", "папа")
+            val children = listOf("девочка", "дочь", "дочка", "сын", "мальчик")
+            return when {
+                kinVocatives.values.any { addr in it && it.any { w -> w in parents } } -> children.firstOrNull { it in seenSpeakers }
+                kinVocatives.values.any { addr in it && it.any { w -> w in children } } -> parents.firstOrNull { it in seenSpeakers }
+                else -> null
+            }
+        }
+        // who is spoken TO: "— Маша, иди сюда", "…, Маша!", "сказал Петру", "посмотрела на Машу"
+        // a vocative is in the nominative, so even a name not seen before counts
+        fun known(w: String): String? = canon(w) ?: run {
+            // Петя ↔ Пётр, Маша ↔ Мария: a known person under another form of the name
+            val lw = w.lowercase()
+            val linked = (diminutives[lw] ?: emptyList()) + diminutives.filterValues { lw in it }.keys
+            linked.firstNotNullOfOrNull { canon(it) }
+        }
+        fun vocative(w: String): String? {
+            // "мама", "доченька", "сынок": the one called so (a role noun of the book if it has one)
+            kinVocatives[w.lowercase()]?.let { cands -> return cands.firstOrNull { it in seenSpeakers } ?: cands.first() }
+            if (w.lowercase() in titles) return null
+            // an unknown word is a name only if the text uses it as one elsewhere, or it is a
+            // common first name: "— Стойте, …", "— Думаю, …" are not addressing anybody
+            return known(w) ?: w.takeIf {
+                it.length >= 3 && it[0].isUpperCase() && it !in notNames && it !in notVocatives &&
+                    (isProper(it) || it.lowercase() in diminutives || diminutives.values.any { v -> it.lowercase() in v })
+            }
+        }
+        /** "сказал я Ленивцу:", "обратился к Глену:" — the one spoken to, named after the speech verb. */
+        fun toWhom(par: String): String? {
+            for (m in TO_WHOM.findAll(par)) {
+                val w = m.groupValues[1]
+                val c = canon(w) ?: continue
+                if (c != HERO && (oblique(w) || m.value.contains(" к "))) return c
+            }
+            return null
+        }
+        fun addresseeIn(speech: String, authorWords: List<String>): String? {
+            val sw = WORD.findAll(speech).map { it.value }.toList()
+            // "Девочка моя, …", "Мам, …", "…, доченька, …" — family words, any case of letters
+            Regex("""(?iu)(?:^|[,!?.…]\s*)(мам[аеуо]?|мамочк[аеуо]|мамул[яеюь]|папа|пап|папочк[аеуо]|доченьк[аеуо]|дочк[аеуо]|доч[ьа]?|сынок|сынку|сына|сыночек|девочка\s+моя|мальчик\s+мой|бабушк[аеуо]|бабуль|дедушк[аеуо]|деда|дедуль)\s*(?=[,!?.…]|$)""")
+                .find(speech)?.let { m -> vocative(m.groupValues[1].substringBefore(' ').lowercase().let { k -> kinKey(k) })?.let { return it } }
+            sw.firstOrNull()?.let { first ->
+                val after = speech.substringAfter(first, "").trimStart()
+                if (after.startsWith(",") || after.startsWith("!")) vocative(first)?.let { return it }
+            }
+            // ", Маша," / ", Маша!" anywhere in the line
+            Regex(""",\s*(?:(?:господин|госпожа|мистер|миссис|леди|лорд|сэр|капитан|лейтенант|генерал|командир|доктор|профессор|товарищ)\s+)?([А-ЯЁ][а-яё]+)\s*(?=[,!?.…»”"])""").findAll(speech).forEach { m ->
+                vocative(m.groupValues[1])?.let { return it }
+            }
+            for (w in authorWords) {
+                val c = canon(w) ?: continue
+                // "откуда он про этого Скарфа знает" — the hero's name in the author words is not "to him"
+                if (c == HERO) continue
+                if (oblique(w)) return c   // an oblique form ("сказал Петру"; the hero's name in the nominative is not one)
+            }
+            return null
+        }
+        var heroGender: G? = null
+        var heroM = 0; var heroF = 0
+        fun genderOf(speaker: String?): G? = when {
+            speaker == null -> null
+            speaker == HERO -> heroGender
+            speaker == SYSTEM -> G.F
+            // numbered names agree like adjectives: "896‑й" (m), "17‑я" (f)
+            speaker.first().isDigit() && nameGender[speaker] == null ->
+                if (speaker.endsWith("я")) G.F else G.M
+            speaker in speakerNouns -> speakerNouns[speaker]
+            // the text says nothing ("— Андрей, ты где?", a book in the present tense):
+            // a dictionary of names and their endings
+            else -> nameGender[speaker] ?: if (speaker.first().isUpperCase() && speaker.length > 1 &&
+                    !speaker.all { it.isUpperCase() }) {
+                when (NameGender.guess(speaker)) { NameGender.G.M -> G.M; NameGender.G.F -> G.F; null -> null }
+            } else null
+        }
+
+        // pass 2: speakers, with a memory of the current dialogue
+        val out = ArrayList<Span>()
+        val run = ArrayList<String>()                 // speakers of the current exchange, oldest first
+        val genderRun = ArrayList<G?>()                // sex of each line of the exchange, named or not
+        val lastMentioned = HashMap<G, String>()       // most recent person of each gender
+        val lineCount = HashMap<String, Int>()
+        val mannerCount = HashMap<String, IntArray>()  // per speaker, by Manner.ordinal
+        var pendingQuoteSpeaker: String? = null        // set by "В голове прозвучало:" for the next «…»
+        var pendingFromIntro = false                   // true only for an introduction ending with ":"
+        var lastAddressee: String? = null              // who the previous line spoke to — likely answers next
+        var introAddr: String? = null                  // "…и сказал Ленивцу:" — the one the next line is said to
+        var goOnNext: String? = null                   // "…и начал свой рассказ." — who speaks on in the next line
+        var heroAttributed = 0                         // "сказал я": the book is told in the first person
+        var systemSeen = false
+        var lastQuoteBody = ""                         // the book has a voice in the head
+        var introHint: Hint? = null                    // "Она сказала:" / "Лена улыбнулась:" — who speaks next
+        var heroSeenAt = -100                          // the last narration paragraph told in the first person
+        var lastSpeechPi = -100                        // the last paragraph with a line in it
+        var beatHint: Hint? = null                     // "Она кивнула." — likely who speaks next
+
+        // who the next line is plainly attributed to ("— …, — заинтересовался я.")
+        fun explicitAt(i: Int): String? {
+            val q = parsed.getOrNull(i) ?: return null
+            if (q.speech.isEmpty() || q.quoted) return null
+            val hh = authorPieces(text, q).asSequence().map { (a, b) -> hintAt(words(text, a, b)) }
+                .firstOrNull { it.name != null || it.hero } ?: return null
+            return if (hh.hero) HERO else hh.name?.let { canon(it) ?: it }
+        }
+
+        // The hero's own name. In a first-person book the others call the hero by name
+        // ("— Алексей, …" — "— Да, — ответил я"); as a character of his own that name got a
+        // voice other than the narrator's, so the hero spoke in two voices («Неучтённый‑3»).
+        run {
+            val heroTags = parsed.count { q -> !q.quoted && q.speech.isNotEmpty() &&
+                authorPieces(text, q).any { (a, b) -> hintAt(words(text, a, b)).hero } }
+            if (heroTags >= 3) {
+                val toHero = HashMap<String, Int>()
+                val toSelf = HashMap<String, Int>()
+                val notHero = HashMap<String, Int>()            // the hero himself calls him so
+                for ((i, q) in parsed.withIndex()) {
+                    if (q.speech.isEmpty() || q.quoted) continue
+                    val body = q.speech.joinToString(" ") { (a, b, _) -> text.substring(a, b) }
+                    val addr = addresseeIn(body, emptyList()) ?: continue
+                    if (!addr.first().isUpperCase() || addr == SYSTEM) continue
+                    // "— Скажите, мистер Астлей, … — сказал я": the hero speaks to him — he is not the hero
+                    // («Игрок»: Астлей was taken for the hero's own name and spoke in the narrator's voice)
+                    val own = explicitAt(i)
+                    // (but "— Андрей, — представился я": a name alone is the hero telling his own name)
+                    if (own == HERO) { if (WORD.findAll(body).count() > 2) notHero[addr] = (notHero[addr] ?: 0) + 1; continue }
+                    if (own == addr) continue
+                    val next = ((i + 1)..minOf(i + 2, parsed.size - 1)).firstOrNull { parsed[it].speech.isNotEmpty() } ?: continue
+                    when (explicitAt(next)) {
+                        HERO -> toHero[addr] = (toHero[addr] ?: 0) + 1
+                        addr -> toSelf[addr] = (toSelf[addr] ?: 0) + 1
+                    }
+                }
+                for ((n, c) in toHero) if (c >= 2 && c >= 2 * (toSelf[n] ?: 0) + 1 && !((notHero[n] ?: 0) >= 2 && (notHero[n] ?: 0) * 2 >= c)) heroNames.add(n)
+            }
+            prior?.aliases?.forEach { (from, to) -> if (to == HERO) heroNames.add(from) }
+            // his surname too: "Алексей Скарф" — "господин Скарф" is the hero as well
+            if (heroNames.isNotEmpty()) {
+                val more = HashSet<String>()
+                for (n in heroNames) Regex("""(?<![А-Яа-яЁё])""" + Regex.escape(n) + """\s+(\p{Lu}[\p{Ll}]{2,})(?![А-Яа-яЁё])""").findAll(text).forEach { m ->
+                    val y = m.groupValues[1]
+                    if (y !in heroNames && y !in notNames && isProper(y) && nameGender[y] != G.F) more.add(y)
+                }
+                heroNames.addAll(more)
+            }
+            for (n in heroNames) {
+                for (f in nameForms(n, false)) nameOf[f] = HERO
+                nameOf[n.lowercase().replace('ё', 'е')] = HERO
+                aliasOut[n] = HERO
+            }
+        }
+        var lastToGender: G? = null                    // "Почему ты так решил?" — the answer is a man's
+
+        for ((pi, p) in parsed.withIndex()) {
+            if (p.speech.isEmpty()) {
+                // narration: remember who was mentioned; a long passage ends the exchange
+                for (w in words(text, p.start, p.end)) {
+                    val n = canon(w) ?: continue
+                    // "Алексей подошёл к ней … — Леита, …? — спросил он": the hero, by his name
+                    if (n == HERO) { if (!oblique(w)) lastMentioned[heroGender ?: G.M] = HERO; continue }
+                    val g = nameGender[n] ?: continue
+                    lastMentioned[g] = n
+                }
+                // "В голове прозвучало:" / "Раздался голос 896‑го:" → who speaks in the next «…»
+                pendingQuoteSpeaker = introSpeaker(text.substring(p.start, p.end))
+                pendingFromIntro = pendingQuoteSpeaker != null
+                introHint = if (pendingQuoteSpeaker == null) speakerIntro(text.substring(p.start, p.end), ::oblique, ::wordGender) else null
+                // "…и сказал Ленивцу:" — the one spoken to (he answers the line that follows)
+                introAddr = if (text.substring(p.start, p.end).trimEnd().endsWith(":")) toWhom(text.substring(p.start, p.end)) else null
+                // first person outside quoted thoughts (another character's «мне…» is not the narrator)
+                if (firstPersonSingular.containsMatchIn(text.substring(p.start, p.end).replace(Regex("""«[^»]*»|"[^"]*"|„[^“]*“"""), " ")) ||
+                    Regex("""(?iu)(^|[^а-яё])(решил|подумал|ответил|спросил|сказал)([^а-яё]|$)""").containsMatchIn(text.substring(p.start, minOf(p.end, p.start + 40)))) heroSeenAt = pi
+                // "Она кивнула." right before a bare line: the line is usually hers
+                beatHint = if (introHint == null && pendingQuoteSpeaker == null) actionBeat(text.substring(p.start, p.end)) else null
+                if (p.end - p.start > 300) { run.clear(); genderRun.clear(); lastAddressee = null; goOnNext = null }
+                out.addAll(p.spans(null, null, Manner.NORMAL))
+                continue
+            }
+            val authors = authorPieces(text, p)
+            // the line's own author words; none — the paragraph before it, if it ended with
+            // "Она сказала:" (the line is hers: before, it fell to the unknown — a man's — voice)
+            // a beat yields to a name in the line: "Андрей кивнул. — Что скажешь, Андрей?" is not his
+            val beat = beatHint?.takeIf { !p.quoted && addresseeIn(p.speech.joinToString(" ") { (a, b, _) -> text.substring(a, b) }, emptyList()) == null }
+            val introBefore = introHint
+            val introAddrBefore = introAddr
+            introAddr = null
+            val storyBy = goOnNext
+            goOnNext = null
+            val fromIntro = if (authors.isEmpty()) introHint ?: beat else null
+            val ownHint = authors.asSequence().map { (a, b) -> hintAt(words(text, a, b)) }
+                .firstOrNull { it.name != null || it.noun != null || it.hero || it.pronoun != null || it.verbGender != null }
+            // the line plainly says whose it is ("— …, — ответил он", "Она сказала:") — then
+            // a self-description inside it does not overrule that
+            val attributed = (ownHint != null && (ownHint.name != null || ownHint.noun != null || ownHint.hero || ownHint.pronoun != null)) ||
+                (authors.isEmpty() && introHint != null)
+            introHint = null
+            beatHint = null
+            // "После чего Аггиус встал… и задал свой вопрос:" before a line whose own author words name
+            // nobody ("— …? — и, увидев пожимающего плечами Лорка, продолжил, — …")
+            val introSubject = introBefore?.takeIf { it.name != null || it.noun != null }
+            val h = if (ownHint != null && introSubject != null && ownHint.name == null && ownHint.noun == null && !ownHint.hero && ownHint.pronoun == null)
+                introSubject else ownHint ?: fromIntro
+            val manner = authors.asSequence().map { (a, b) -> mannerOf(text.substring(a, b)) }
+                .firstOrNull { it != Manner.NORMAL } ?: Manner.NORMAL
+
+            var speaker: String? = null
+            var gender: G? = null
+            val forced = prior?.overrides?.takeIf { it.isNotEmpty() }?.let { ov ->
+                p.speech.asSequence().mapNotNull { (a, b, _) -> ov[speechKey(text.substring(a, b))] }.firstOrNull()
+            }
+            if (forced == FORCE_NARRATOR) {
+                // the user says this is not a line at all: read it as narration
+                out.addAll(p.pieces.map { (a, b, _) -> Span(a, b, Role.NARRATOR) })
+                continue
+            }
+            val speechText = p.speech.joinToString(" ") { (a, b, _) -> text.substring(a, b) }
+            // the hero takes part in this talk: spoke in it lately, or the narration just before is his
+            // (not merely a first-person book: its third-person chapters have no hero in them)
+            val heroNear = heroAttributed > 0 && (HERO in run.takeLast(4) || pi - heroSeenAt <= 4)
+            val addressee = if (forced == null) {
+                addresseeIn(speechText, authors.flatMap { (a, b) -> words(text, a, b) })
+                    ?: (if (authors.isEmpty()) introAddrBefore else null)
+            } else null
+            var thoughtOwner: String? = null   // "мысль … Ленивца:" — named in the oblique case, yet the speaker
+            if (forced != null) {
+                speaker = if (forced == FORCE_UNKNOWN) null else forced
+                gender = genderOf(speaker)
+            } else if (p.quoted) {
+                // a «…» message: introduced in this paragraph ("прозвучал голос: «…»"), by the
+                // previous one ("В голове прозвучало:"), or recognisable by its content
+                val intro = authors.firstOrNull()?.let { (a, b) -> introSpeaker(text.substring(a, b)) }
+                val bySubject = h?.let { it.name ?: it.noun ?: if (it.hero) HERO else null }
+                // "пришла мысль выглянувшего из-за ноги Ленивца: «Хорошая еда»" — whose thought it is
+                val thoughtOf = authors.firstOrNull()?.let { (a, b) ->
+                    THOUGHT_OF.find(text.substring(a, b))?.groupValues?.get(1)?.let { w -> canon(w)?.takeIf { it != HERO && oblique(w) } }
+                }
+                thoughtOwner = thoughtOf
+                // a name as the subject ("— рапортовала Леита … в голосе …") is stronger than "a voice"
+                speaker = h?.name?.let { canon(it) ?: it }?.takeIf { authors.isNotEmpty() } ?: intro ?: thoughtOf ?: bySubject
+                if (speaker == null && authors.isEmpty() && fromIntro == null) {
+                    val body = p.speech.joinToString(" ") { (a, b, _) -> text.substring(a, b) }
+                    speaker = when {
+                        // introduced right before ("я задал вопрос:", "В голове прозвучало:")
+                        pendingFromIntro && pendingQuoteSpeaker != null -> pendingQuoteSpeaker
+                        // «Сеть, Магик, озвучьте…» is said TO them: in a first-person book, by the hero
+                        !third && addresseeIn(body, emptyList()) != null -> HERO
+                        !third && firstPersonSingular.containsMatchIn(body) -> HERO     // the hero thinking: narrator's voice
+                        // «Да». «Да». — both voices answered the same
+                        pendingQuoteSpeaker != null && body.trim() == lastQuoteBody -> pendingQuoteSpeaker
+                        // the hero asked the voice in his head: this is its answer
+                        pendingQuoteSpeaker == HERO && systemSeen -> SYSTEM
+                        // the voice reports, the hero asks back ("…Что дальше?")
+                        pendingQuoteSpeaker == SYSTEM && body.trimEnd(' ', '»', '"', '.').endsWith("?") -> HERO
+                        // …and the hero answers the voice
+                        pendingQuoteSpeaker == SYSTEM && !systemContent.containsMatchIn(body) -> HERO
+                        // «…Приступить?» — «Да»: a short answer to a voice's question is the hero's
+                        pendingQuoteSpeaker != null && pendingQuoteSpeaker != HERO && lastQuoteBody.trimEnd(' ', '»', '"', '“').endsWith("?") &&
+                            WORD.findAll(body).count() <= 3 && heroAttributed > 0 -> HERO
+                        pendingQuoteSpeaker != null -> pendingQuoteSpeaker     // a run of messages
+                        systemContent.containsMatchIn(body) -> SYSTEM
+                        !third && firstPersonThought.containsMatchIn(body) -> HERO
+                        else -> null
+                    }
+                }
+                // «Спасибо, обдумаю», - мысленно протранслировал ему: a first-person book, author words
+                // with a verb but no subject — "(я) протранслировал", the hero (it went to "a man")
+                if (speaker == null && h != null && h.name == null && h.noun == null && h.pronoun == null && h.verbGender != null &&
+                    authors.isNotEmpty() && heroAttributed > 0 && (heroNear || pi - heroSeenAt <= 6) &&
+                    (heroGender == null || heroGender == h.verbGender) &&
+                    authors.none { (a, b) -> words(text, a, b).any { it.lowercase() in setOf("мне", "меня", "мной", "мною") } } &&
+                    !subjectAfterVerb(authors.first().let { (a, b) -> words(text, a, b) })) {
+                    speaker = HERO; heroAttributed++
+                }
+                // «Интересно, я когда-нибудь смогу… – Но, посмотрев на девушку, понял: – Нет…» — a thought in the
+                // first person, its author words naming nobody else: the hero's (it went to an unknown man's voice)
+                if (speaker == null && authors.isNotEmpty() && heroAttributed > 0 && addressee != HERO &&
+                    (h == null || (h.name == null && h.noun == null && h.pronoun == null)) &&
+                    (h?.verbGender == null || heroGender == null || h.verbGender == heroGender) &&
+                    firstPersonSingular.containsMatchIn(p.speech.joinToString(" ") { (a, b, _) -> text.substring(a, b) })) {
+                    speaker = HERO; heroAttributed++
+                }
+                pendingQuoteSpeaker = if (authors.isEmpty()) speaker else null
+                lastQuoteBody = p.speech.joinToString(" ") { (a, b, _) -> text.substring(a, b) }.trim()
+                if (speaker == SYSTEM) systemSeen = true
+                pendingFromIntro = false   // a run of «…» messages does not carry over to dash lines
+                gender = if (speaker == SYSTEM) G.F else h?.verbGender ?: h?.pronoun ?: genderOf(speaker)
+            } else if (authors.isEmpty() && pendingQuoteSpeaker != null && pendingFromIntro) {
+                // "Раздался голос 896‑го:" followed by a dash line
+                speaker = pendingQuoteSpeaker
+                gender = genderOf(speaker)
+                pendingQuoteSpeaker = null
+                pendingFromIntro = false
+            } else if (h != null) {
+                when {
+                    h.hero && !third -> { speaker = HERO; gender = h.verbGender; heroAttributed++ }
+                    h.name != null -> {
+                        speaker = canon(h.name) ?: h.name
+                        gender = h.verbGender ?: nameGender[speaker]
+                    }
+                    h.noun != null -> { speaker = h.noun; gender = speakerNouns[h.noun] }
+                    else -> {
+                        gender = h.pronoun ?: h.verbGender
+                        val prev = run.lastOrNull()
+                        val others = run.filter { genderOf(it) == gender && it != prev && it != HERO }
+                        val sameGenderOthers = others.filter { isHuman(it) }.ifEmpty { others }
+                        // a first-person book, the hero in the scene: "— …, — решил сделать обиженный вид"
+                        // (no subject) is the hero's — it went to a man who spoke long before
+                        // "— Добрый вечер, — обратился ко мне …" is said TO the hero
+                        val toMe = authors.any { (a, b) -> words(text, a, b).any { it.lowercase() in setOf("мне", "меня", "мной", "мною") } }
+                        val heroOk = h.pronoun == null && heroNear && !toMe &&
+                            (heroGender == null || heroGender == gender)
+                        // "— …, — продолжил он" / "добавила": the same person goes on
+                        // (only after a whole line: between two parts of one line it says nothing of who)
+                        val goesOn = p.speech.size == 1 &&
+                            authors.any { (a, b) -> words(text, a, b).take(6).any { w -> continueStems.any { w.lowercase().startsWith(it) } } }
+                        // the one just spoken to answers ("— Ньютон, что ты выяснил? / — Да, Алексей, …, — перешёл на официальный тон")
+                        val askedFits = lastAddressee?.takeIf { it != prev && it != HERO && (genderOf(it) == null || genderOf(it) == gender) }
+                        speaker = when {
+                            // "…кивнул он и начал свой рассказ. / — Ну, … — Он немного помолчал." — his story goes on
+                            storyBy != null && (genderOf(storyBy) == null || genderOf(storyBy) == gender) -> storyBy
+                            goesOn && prev != null && (genderOf(prev) == null || genderOf(prev) == gender) -> prev
+                            askedFits != null -> askedFits
+                            // turn-taking: "он" right after one man spoke is the other man
+                            prev != null && genderOf(prev) == gender && sameGenderOthers.isNotEmpty() ->
+                                sameGenderOthers.last()
+                            prev != null && genderOf(prev) != gender ->
+                                (run.takeLast(4).lastOrNull { genderOf(it) == gender && isHuman(it) }
+                                    ?: (if (heroOk) HERO else null)
+                                    ?: run.lastOrNull { genderOf(it) == gender && isHuman(it) }
+                                    ?: run.lastOrNull { genderOf(it) == gender }) ?: lastMentioned[gender]
+                            prev == null -> if (heroOk) HERO else lastMentioned[gender]
+                            else -> null
+                        }
+                    }
+                }
+            } else if (!p.quoted) {
+                // bare line (or author words that do not say who): the one just spoken to answers;
+                // otherwise the two people take turns
+                val asked = lastAddressee
+                if (storyBy != null && !samePerson(storyBy, addressee)) speaker = storyBy
+                // (not straight after the hero's own line: that is someone answering him, calling him by a
+                // name or "бабуль" the book has not tied to the hero)
+                val replyToHero = run.lastOrNull() == HERO && pi - lastSpeechPi == 1
+                if (speaker != null) {
+                    // his story goes on (set just above)
+                } else if (addressee != null && addressee != HERO && heroNear && !replyToHero && (asked == null || pi - lastSpeechPi > 1)) {
+                    // a first-person book, the hero in the scene: "— Ньютон, что ты выяснил?",
+                    // "— Ника, уведомляй меня" — the hero calls on someone (it went to whoever
+                    // spoke before: a woman's voice for the hero's orders)
+                    speaker = HERO
+                } else if (asked != null && run.lastOrNull() != asked) {
+                    speaker = asked
+                } else if (heroNear && GROUP_CALL.containsMatchIn(speechText)) {
+                    // "Значит так, девочки мои": the hero to his team
+                    speaker = HERO
+                } else {
+                    val distinct = run.distinct()
+                    if (distinct.size >= 2 && run.size >= 2) {
+                        // the one before the last speaker — not the last one again when they
+                        // spoke twice running (Лорк, Лорк → Аггиус, not Лорк for ever)
+                        // (straight after a line; after narration the same one may go on: "— …, — сказал искин.
+                        // Если бы у искина было чувство удивления… — Работы проводились параллельно…")
+                        speaker = if (pi - lastSpeechPi == 1) run.lastOrNull { it != run.last() } else run[run.size - 2]
+                        // two others have spoken in turn, the hero is in the talk: now it is his turn
+                        // ("— Почему? — спросила Рахута. / — Смотрите, что нам известно…")
+                        if (heroNear && speaker != HERO && run.takeLast(2).none { it == HERO } && HERO in run.takeLast(3))
+                            speaker = HERO
+                        // the same person rarely speaks twice in a row: if the next line is plainly
+                        // theirs, this one is the other's ("— Согласен." «…» — Только сначала…)
+                        if (speaker == explicitAt(pi + 1)) speaker = run.lastOrNull { it != speaker } ?: speaker
+                    }
+                }
+                // a first-person book, the hero and one other in the scene: the one who is not the
+                // last speaker is the hero ("— Да." is 896-го, "— Может, поможешь?" is the hero's)
+                if (speaker == null && heroAttributed > 0 && pi - heroSeenAt <= 6) {
+                    val last = run.lastOrNull()
+                    // only straight after the other's line: after a passage of narration the same
+                    // person may well go on ("…, — сказал искин. Он помолчал. — Потом есть время…")
+                    val adjacent = pi - lastSpeechPi == 1
+                    speaker = when {
+                        adjacent && last != null && last != HERO && (asked == null || asked == HERO) -> HERO
+                        adjacent && last == HERO -> run.lastOrNull { it != HERO }
+                        last == null && addressee != null && addressee != HERO -> HERO
+                        else -> null
+                    }
+                }
+            }
+            if (forced == null && addressee != null) {
+                // (named in the author words — "— Алексей, а не Алекс, — спросил я" — stays: the
+                // hero correcting his own name is no call to someone else)
+                // ("— вопрос, который я ожидал" is no "спросил я": only a verb right before "я" counts)
+                val named = attributed && ownHint != null && (ownHint.name != null || (ownHint.hero &&
+                    authors.firstOrNull()?.let { (a, b) -> Regex("""^[\s,—–-]*\p{L}+(л|ла)\s+я(?!\p{L})""").containsMatchIn(text.substring(a, b)) } == true))
+                if (samePerson(speaker, addressee) && !named && speaker != thoughtOwner) {
+                    // "— Маша, иди сюда" cannot be Маша's own line
+                    speaker = run.lastOrNull { !samePerson(it, addressee) }
+                    gender = null
+                } else if (speaker == null && authors.isEmpty() && !p.quoted) {
+                    speaker = run.lastOrNull { !samePerson(it, addressee) } ?: kinComplement(addressee)
+                        ?: if (heroAttributed > 0 && pi - heroSeenAt <= 6) HERO else null
+                }
+            }
+            // a bare line nobody could be named for: in a talk of a man and a woman they take
+            // turns ("— Вы кто? — спросил он." / «Я по объявлению», — ответила Анита. / "— Понятно…"
+            // is his, not the book's main character's)
+            if (forced == null && speaker == null && gender == null && (authors.isEmpty() || h == null) && !p.quoted && fromIntro == null) {
+                val n = genderRun.size
+                if (n >= 2 && genderRun[n - 1] != null && genderRun[n - 2] != null && genderRun[n - 1] != genderRun[n - 2])
+                    gender = genderRun[n - 2]
+            }
+            // "— Почему ты так решил?" — the answer is a man's: a guess of the other sex yields
+            val expectG = if (!p.quoted && pi - lastSpeechPi == 1) lastToGender else null
+            if (forced == null && !attributed && !p.quoted && expectG != null) {
+                val sg = genderOf(speaker)
+                if (speaker != null && sg != null && sg != expectG) {
+                    speaker = (if (heroNear && speaker != HERO && (heroGender == null || heroGender == expectG)) HERO else null)
+                        ?: run.lastOrNull { it != run.lastOrNull() && genderOf(it) == expectG && isHuman(it) }
+                    gender = expectG
+                } else if (speaker == null && gender == null) gender = expectG
+            }
+            // a guessed speaker named in the line itself ("— План такой: Леита и Рахута завтра…")
+            // is not the one saying it
+            if (forced == null && !attributed && !p.quoted && speaker != null && speaker != HERO && speaker != SYSTEM &&
+                !samePerson(addressee, speaker) &&
+                // (the first part of the paragraph: "— Список будет через минуту. — … — Ника, чей голос…?" names her in the hero's part)
+                WORD.findAll(text.substring(p.speech[0].first, p.speech[0].second)).any { canon(it.value) == speaker } &&
+                // "…лейтенант … — Рек Згимешь", "меня зовут Рек": introducing oneself
+                !Regex("""(?iu)(зовут|представ|[—–-]\s*\p{Lu})""").containsMatchIn(speechText)) {
+                speaker = (if (heroNear) HERO else null) ?: run.lastOrNull { it != speaker && it != run.lastOrNull() }
+                gender = null
+            }
+            // the speaker gives themself away: "Я готов…", "я сказала", "я уверена" — that is
+            // stronger than any guess from the context ("готов" read in a woman's voice before)
+            if (forced == null && !attributed) {
+                val self = selfGender(speechText)
+                if (self != null && self != gender) {
+                    gender = self
+                    // a speaker of the other sex cannot say it; one whose sex is not known yet can
+                    val sg = genderOf(speaker)
+                    if (speaker != null && speaker != SYSTEM && sg != null && sg != self) {
+                        // a first-person book: the other one in the talk is usually the hero himself
+                        speaker = (if (heroAttributed > 0 && heroGender == self && speaker != HERO) HERO else null)
+                            ?: run.lastOrNull { it != speaker && genderOf(it) == self && isHuman(it) }
+                            ?: lastMentioned[self]?.takeIf { genderOf(it) == self }
+                    }
+                }
+            }
+            if (!p.quoted) { lastAddressee = addressee; lastToGender = addresseeGender(speechText) }
+            // a said «…» (with author words or "она ответила:" before) is a turn of the talk too
+            if (!p.quoted || authors.isNotEmpty() || fromIntro != null) genderRun.add(gender)
+            // the hero's sex: what most of his lines say (one line of a chapter told by a woman
+            // made him a woman to the end of the book — and his unnamed lines took her voice)
+            if (speaker == HERO && gender != null) {
+                if (gender == G.M) heroM++ else heroF++
+                heroGender = if (heroF > heroM) G.F else G.M
+            }
+            // (a guessed «…» thought is no sign of the hero being there: another character's thoughts
+            // in a third-person chapter were taken for his and pulled him into the talk)
+            if (speaker == HERO && (!p.quoted || attributed)) heroSeenAt = pi
+            speaker = speaker?.let { canonKin(it) }
+            if (speaker != null && gender == null) gender = genderOf(speaker)
+            if (speaker != null) {
+                if (!p.quoted) run.add(speaker)
+                if (isHuman(speaker)) gender?.let { lastMentioned[it] = speaker }
+                lineCount[speaker] = (lineCount[speaker] ?: 0) + 1
+                seenSpeakers.add(speaker)
+                mannerCount.getOrPut(speaker) { IntArray(Manner.values().size) }[manner.ordinal]++
+            }
+            if (!p.quoted) lastSpeechPi = pi          // a «thought» between is not a turn of the talk
+            val spans = p.spans(gender, speaker, manner).toMutableList()
+            // one paragraph, two people: "— Список будет через минуту. — Какой голос!.. — Ника, чей
+            // голос ты используешь?" — a later line calling the speaker by name is the other one's
+            if (forced == null && speaker != null && !p.quoted && p.speech.size >= 2) {
+                val k = (1 until p.speech.size).firstOrNull { idx ->
+                    val (a, b, _) = p.speech[idx]
+                    samePerson(addresseeIn(text.substring(a, b), emptyList()), speaker)
+                }
+                if (k != null) {
+                    val other = if (heroAttributed > 0 && pi - heroSeenAt <= 6 && speaker != HERO) HERO
+                        else run.lastOrNull { !samePerson(it, speaker) && it != HERO }
+                    if (other != null) {
+                        val from = p.speech[k].first
+                        val og = genderOf(other)
+                        for (i in spans.indices) if (spans[i].start >= from && spans[i].role != Role.NARRATOR)
+                            spans[i] = spans[i].copy(speaker = other, role = when (og) { G.M -> Role.MALE; G.F -> Role.FEMALE; null -> Role.SPEECH })
+                        run.add(other)
+                        lineCount[other] = (lineCount[other] ?: 0) + 1
+                        seenSpeakers.add(other)
+                    }
+                }
+            }
+            probeTL.get()?.add(Probe(p.start, p.end, p.speech.map { intArrayOf(it.first, it.second) }, authors.map { intArrayOf(it.first, it.second) },
+                when { ownHint == null -> if (authors.isEmpty() && introBefore != null) 5 else 0
+                       ownHint.name != null -> 4; ownHint.noun != null -> 3; ownHint.hero -> 2; ownHint.pronoun != null -> 1; else -> 0 },
+                p.quoted, speaker))
+            out.addAll(spans)
+            // "— Задачу принял, — уведомил Декстер. А вслед за ним отчитался и Ньютон:" — the next line is Ньютон's
+            if (!p.quoted && authors.isNotEmpty() && text.substring(p.start, p.end).trimEnd().endsWith(":"))
+                introHint = speakerIntro(text.substring(authors.last().first, authors.last().second), ::oblique, ::wordGender)
+            // …and to whom the next line is said (after a «thought» too: "«Параноики живут дольше», – усмехнулся я
+            // и сказал Ленивцу:" — the next line is said to Ленивец, his answer after it is his)
+            if (authors.isNotEmpty() && text.substring(p.start, p.end).trimEnd().endsWith(":"))
+                introAddr = toWhom(text.substring(authors.last().first, authors.last().second))
+            // "— …, — кивнул он и начал свой рассказ." — the next line is his story going on
+            if (!p.quoted && speaker != null && speaker != HERO && authors.any { (a, b) -> STORY_START.containsMatchIn(text.substring(a, b)) })
+                goOnNext = speaker
+        }
+
+        // Not a first-person book: unattributed «…» thoughts are not "the hero-narrator's" —
+        // leave them unknown (the reader gives them the main character's voice).
+        if (heroAttributed == 0 && HERO in lineCount) {
+            for (i in out.indices) if (out[i].speaker == HERO) out[i] = out[i].copy(speaker = null, role = Role.SPEECH)
+            lineCount.remove(HERO)
+            mannerCount.remove(HERO)
+        }
+
+        // One machine, two names: "искин" / "компьютер" and a single numbered name ("896‑й")
+        // are the same character in practice — merge them under the numbered name.
+        val numbered = lineCount.keys.filter { it.first().isDigit() }
+        val alias = HashMap<String, String>()
+        if (numbered.size == 1) {
+            for (m in lineCount.keys) if (m in machines) alias[m] = numbered[0]
+        }
+        if (alias.isNotEmpty()) {
+            for (i in out.indices) out[i].speaker?.let { sp -> alias[sp]?.let { out[i] = out[i].copy(speaker = it) } }
+            for ((from, to) in alias) {
+                lineCount[to] = (lineCount[to] ?: 0) + (lineCount.remove(from) ?: 0)
+                val a = mannerCount.remove(from)
+                if (a != null) { val b = mannerCount.getOrPut(to) { IntArray(a.size) }; for (k in a.indices) b[k] += a[k] }
+                if (nameGender[to] == null) speakerNouns[from]?.let { nameGender[to] = it }
+            }
+        }
+
+        // One person, one name: the case forms the attribution picked up ("помоги Нике" →
+        // "Нике", "голос Леиты", "словах Магика") join the name they are forms of — as separate
+        // "characters" they got a voice of the wrong gender. Capitalised ordinary words that
+        // are never capitalised inside a sentence ("Пока", "Нужно", "Задав", "Великими") are no
+        // one at all: their lines become lines of an unknown speaker.
+        run {
+            val speakers = lineCount.keys.filter { it != HERO && it != SYSTEM && it.first().isUpperCase() }
+            if (speakers.isEmpty()) return@run
+            val wanted = speakers.map { it.lowercase().replace('ё', 'е') }.toHashSet()
+            val lower = HashMap<String, Int>()
+            val midCaps = HashMap<String, Int>()
+            for (m in Regex("""[А-ЯЁа-яё][а-яё]+""").findAll(text)) {
+                val key = m.value.lowercase().replace('ё', 'е')
+                if (key !in wanted) continue
+                if (m.value[0].isLowerCase()) { lower[key] = (lower[key] ?: 0) + 1; continue }
+                var k = m.range.first - 1
+                while (k >= 0 && text[k] == ' ') k--
+                val prev = if (k >= 0) text[k] else '\n'
+                if (prev.isLetterOrDigit() || prev in ",;:)") midCaps[key] = (midCaps[key] ?: 0) + 1
+            }
+            val formOf = HashMap<String, String>()
+            for (n in speakers.sortedByDescending { lineCount[it] ?: 0 }) {
+                val own = n.lowercase().replace('ё', 'е')
+                for (f in nameForms(n, genderOf(n) == G.F)) if (f != own) formOf.putIfAbsent(f, n)
+            }
+            val rename = HashMap<String, String?>()
+            for (n in speakers) {
+                val key = n.lowercase().replace('ё', 'е')
+                val base = formOf[key]
+                if (base != null && base != n && (lineCount[base] ?: 0) >= (lineCount[n] ?: 0) && base !in rename) {
+                    rename[n] = base; continue
+                }
+                if (n.first().isDigit() || NameGender.known(n)) continue
+                // an adjective in an oblique case is never someone's name ("Великими", "Перспективную")
+                if (Regex("(ими|ыми|ую|юю|ого|ому|ему)$").containsMatchIn(key)) { rename[n] = null; continue }
+                if ((midCaps[key] ?: 0) > 0) continue
+                val adjective = key.endsWith("ый")
+                val gerund = Regex("(ав|яв|ив|ыв|вши)$").containsMatchIn(key)
+                if ((lower[key] ?: 0) > 0 || adjective || gerund) rename[n] = null
+            }
+            if (rename.isEmpty()) return@run
+            for (i in out.indices) {
+                val sp = out[i].speaker ?: continue
+                if (sp !in rename) continue
+                val to = rename[sp]
+                out[i] = if (to == null) out[i].copy(speaker = null, role = Role.SPEECH)
+                    else out[i].copy(speaker = to, role = when (genderOf(to)) { G.M -> Role.MALE; G.F -> Role.FEMALE; null -> out[i].role })
+            }
+            for ((from, to) in rename) {
+                val n = lineCount.remove(from) ?: 0
+                val a = mannerCount.remove(from)
+                if (to != null) {
+                    lineCount[to] = (lineCount[to] ?: 0) + n
+                    if (a != null) { val b = mannerCount.getOrPut(to) { IntArray(a.size) }; for (k in a.indices) b[k] += a[k] }
+                }
+            }
+        }
+
+        // One person, one name, part 2: first name and surname ("Лорк Сноук", "Ниин Мак" — the
+        // text says "Лорк" here and "Сноук" there) and a short form of a long name ("Йон" —
+        // "Йонилаудиус"); and the whole book's merges for a chapter that does not show them.
+        // As two characters they got two voices: one man speaking in two voices.
+        run {
+            val merge = LinkedHashMap<String, String>()
+            prior?.aliases?.forEach { (from, to) -> if (to != HERO && from in lineCount) merge[from] = to }
+            // one who tells his name: «Зовут меня Лениавес Рыжий», said by the one the hero calls
+            // Ленивец — one creature under two names, read in two voices («Где-то там…», tolyos).
+            // Kept for the whole book (the name he was called by speaks on in later chapters).
+            val introduced = LinkedHashMap<String, String>()
+            for (sp in out) {
+                val who = sp.speaker ?: continue
+                if (who == HERO || who == SYSTEM || sp.role == Role.NARRATOR || !who.first().isUpperCase()) continue
+                val speech = text.substring(sp.start, sp.end)
+                val n = SELF_NAME.find(speech)?.groupValues?.get(1)?.let { canon(it) ?: it }
+                    ?: SELF_I_AM.find(speech)?.groupValues?.get(1)?.let { canon(it) }
+                    ?: continue
+                if (n == who || n == HERO || n.length < 3 || n in notNames) continue
+                if (genderOf(n) != null && genderOf(who) != null && genderOf(n) != genderOf(who)) continue
+                if (n !in merge && n !in introduced) introduced[n] = who
+            }
+            for ((n, who) in introduced) if (merge[who] != n) merge[n] = who
+            // a title with a name after it ("начальник Рафт"): one person in this chapter, when it is
+            // the only name the title stands with here (only here: "командир" is another man elsewhere)
+            val local = HashSet<String>()
+            // (titles only, not kin: "мать Леиты" is her mother; the title and the name in the same case:
+            // "начальник Рафт", "начальника Рафта" — "начальник Флика" is Флик's chief)
+            for (t in lineCount.keys.filter { it in TITLES }) {
+                val names = Regex("(?<![А-Яа-яЁё])" + Regex.escape(t) + "([а-яё]{0,3})\\s+([А-ЯЁ][а-яё]+)", RegexOption.IGNORE_CASE)
+                    .findAll(text).mapNotNull { mm -> canon(mm.groupValues[2])?.takeIf { (mm.groupValues[1].isEmpty()) != oblique(mm.groupValues[2]) } }
+                    .filter { it != HERO }.toSet()
+                val to = names.singleOrNull() ?: continue
+                if (to !in lineCount || (genderOf(t) != null && genderOf(to) != null && genderOf(t) != genderOf(to))) continue
+                merge[t] = to; local += t
+            }
+            // a kind of creature and its name: «корнол» is Лениавес («Город древних», tolyos). Only the
+            // book's own nouns (not «девушка», «старик»: other people in other chapters), and only one
+            // name: the text says it («к корнолу, назвавшемуся Лениавесом»), or it is nearly always
+            // that name around the noun — of the same sex, and never «корнол и Эрея» (those are two)
+            val ownNouns = ownNounsTL.get() ?: emptySet()
+            val nounSpeakers = lineCount.keys.filter { it in ownNouns && it !in merge }
+            if (nounSpeakers.isNotEmpty()) {
+                val nameWord = "([А-ЯЁ][а-яё]+)"
+                // the names in each paragraph
+                val paraNames = paragraphs.map { (ps, pe) ->
+                    Regex("[А-ЯЁ][а-яё]+").findAll(text.substring(ps, pe)).mapNotNull { canon(it.value) }
+                        .filter { it != HERO && it != SYSTEM && it in lineCount }.toHashSet()
+                }
+                for (d in nounSpeakers) {
+                    val dg = speakerNouns[d]
+                    fun sex(n: String) = dg == null || genderOf(n) == null || genderOf(n) == dg
+                    val dForm = "(?<![А-Яа-яЁё])(?:" + stemsOf(d).joinToString("|") { st ->
+                        "[" + st[0].uppercaseChar() + st[0] + "]" + Regex.escape(st.drop(1)) } + ")[а-яё]{0,3}(?![А-Яа-яЁё])"
+                    // the same word as a title: «повелитель» and «Повелитель»
+                    val titled = d.replaceFirstChar { it.uppercaseChar() }.takeIf { it in lineCount }
+                    val told = Regex(dForm + ",?\\s+(?:назвавш|представивш)[а-яё]*ся\\s+" + nameWord + "|" + dForm + "\\s+по\\s+имени\\s+" + nameWord)
+                    val toldName = told.findAll(text).mapNotNull { m -> canon(m.groupValues[1].ifEmpty { m.groupValues[2] }) }
+                        .filter { it != HERO && it in lineCount && sex(it) }
+                        .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+                    val to = titled ?: toldName ?: run {
+                        val dRe = Regex(dForm)
+                        val twoA = Regex(dForm + "\\s+и\\s+" + nameWord)
+                        val twoB = Regex(nameWord + "\\s+и\\s+" + dForm)
+                        val near = HashMap<String, Int>()
+                        val apart = HashSet<String>()
+                        var windows = 0
+                        for ((i, pr) in paragraphs.withIndex()) {
+                            val pt = text.substring(pr.first, pr.second)
+                            if (!dRe.containsMatchIn(pt)) continue
+                            windows++
+                            val around = HashSet<String>()
+                            for (j in maxOf(0, i - 2)..minOf(paragraphs.lastIndex, i + 2)) around.addAll(paraNames[j])
+                            for (n in around) near[n] = (near[n] ?: 0) + 1
+                            for (m in twoA.findAll(pt)) canon(m.groupValues[1])?.let { apart += it }
+                            for (m in twoB.findAll(pt)) canon(m.groupValues[1])?.let { apart += it }
+                        }
+                        val ranked = near.entries.filter { it.key !in apart && it.key.first().isUpperCase() && sex(it.key) }
+                            .sortedByDescending { it.value }
+                        val best = ranked.firstOrNull() ?: return@run null
+                        val second = ranked.getOrNull(1)?.value ?: 0
+                        if (best.value >= 10 && best.value >= 3 * second && best.value * 10 >= windows * 3) best.key else null
+                    } ?: continue
+                    // the title takes the noun's sex («Повелитель» spoke twice, nobody said how)
+                    if (to == titled && nameGender[to] == null) dg?.let { nameGender[to] = it }
+                    merge[d] = to
+                }
+            }
+            val people = lineCount.keys.filter { it != HERO && it != SYSTEM && it.first().isUpperCase() && it.length >= 3 && it !in merge }
+            fun pairRe(a: String, b: String) = Regex("""(?<![А-Яа-яЁё])""" + Regex.escape(a) + """\s+(?:[А-ЯЁ][а-яё]+(?:ович|евич|ич|овна|евна|ична|инична)\s+)?""" +
+                Regex.escape(b) + """(?![А-Яа-яЁё])""")
+            // every "Имя Фамилия" (and "Имя Отчество Фамилия") of the text in one pass: a regex per pair of
+            // people was hundreds of thousands of passes over a whole book
+            val cyr = Regex("[А-Яа-яЁё]+")
+            val patron = Regex("[А-ЯЁ][а-яё]+(?:ович|евич|ич|овна|евна|ична|инична)")
+            val seenPairs = HashMap<String, Int>()
+            // (one matcher for the whole book, nothing kept but the last two words: on Android every match of
+            // findAll() is a matcher with its own copy of the text — kept in a list for a whole book they took
+            // 6 GB of memory and the system closed the app, 1.50)
+            run {
+                val m = cyr.toPattern().matcher(text)
+                var w1: String? = null; var e1 = 0          // the word before
+                var w2: String? = null; var e2 = 0; var gap21 = false   // the one before it, and whether only spaces part them
+                fun ws(a: Int, b: Int): Boolean {
+                    if (b <= a) return false
+                    for (k in a until b) if (!text[k].isWhitespace()) return false
+                    return true
+                }
+                while (m.find()) {
+                    val v = m.group(); val s0 = m.start(); val e0 = m.end()
+                    val gap10 = w1 != null && ws(e1, s0)
+                    if (gap10 && v[0].isUpperCase() && w1!![0].isUpperCase()) {
+                        seenPairs.merge(w1 + "\u0000" + v, 1, Int::plus)
+                        if (w2 != null && gap21 && w2!![0].isUpperCase() && patron.matches(w1!!)) seenPairs.merge(w2 + "\u0000" + v, 1, Int::plus)
+                    }
+                    w2 = w1; e2 = e1; gap21 = gap10
+                    w1 = v; e1 = e0
+                }
+            }
+            fun cyrOnly(w: String) = w.isNotEmpty() && w.all { it in 'А'..'я' || it == 'Ё' || it == 'ё' }
+            fun hasPair(a: String, b: String) =
+                if (cyrOnly(a) && cyrOnly(b)) (a + "\u0000" + b) in seenPairs else pairRe(a, b).containsMatchIn(text)
+            fun pairCount(a: String, b: String) =
+                if (cyrOnly(a) && cyrOnly(b)) seenPairs[a + "\u0000" + b] ?: 0 else pairRe(a, b).findAll(text).count()
+            // a family's surname («Элизабет Беннет», «Джейн Беннет», «миссис Беннет»; «Алексей Турбин», «Николка
+            // Турбин»): it is not one person's other name — merged, a whole family spoke in one voice
+            val family = HashSet(familyTL.get() ?: emptySet<String>())
+            // (first names only: «Профессор Лэнгдон», «Капитан …» are titles of the one man)
+            // a common noun too («Посол Нагель» — «посол» stands in the text in small letters): no first name
+            val lowerWords = HashMap<String, Int>()
+            val wanted = people.map { it.lowercase() }.toHashSet()
+            run { val m = cyr.toPattern().matcher(text); while (m.find()) { val v = m.group(); if (v[0].isLowerCase() && v in wanted) lowerWords.merge(v, 1, Int::plus) } }
+            fun titleWord(w: String) = w.lowercase().let { it in speakerNouns || it in maleTitles || it in femaleTitles || it in TITLES || it in HONOR ||
+                (lowerWords[it] ?: 0) >= 2 }
+            // two first names, each seen twice with the surname («Соломон Лэнгдон» once is no family)
+            for (b in people) if (b !in family && people.count { a -> a != b && !titleWord(a) && pairCount(a, b) >= 2 } >= 2) family += b
+            for (a in people) for (b in people) {
+                if (a == b || a in merge || b in merge) continue
+                // "Лорк Сноук", "Лев Николаевич Мышкин" (a patronymic between the name and the surname)
+                val pair = b !in family && hasPair(a, b)
+                val short = b.startsWith(a) && b.length >= a.length + 4 && genderOf(a) == genderOf(b)
+                // "Саша" and "Александр" (when the text does not say they are of different sex)
+                val sameName = sameFirstName(a, b) &&
+                    (genderOf(a) == null || genderOf(b) == null || genderOf(a) == genderOf(b))
+                if (!pair && !short && !sameName) continue
+                val (from, to) = if ((lineCount[a] ?: 0) >= (lineCount[b] ?: 0)) b to a else a to b
+                if (genderOf(from) != null && genderOf(to) != null && genderOf(from) != genderOf(to)) continue
+                merge[from] = to
+            }
+            // one word written two ways: «король» (сказал король) and «Король» (as a title, at the start of a
+            // sentence) — one person; as two they got two voices, and «Король» even had no sex («Алиса»)
+            for (k in lineCount.keys.toList()) {
+                if (k == HERO || k == SYSTEM || k in merge || !k.first().isLowerCase()) continue
+                val cap = k.replaceFirstChar { it.uppercaseChar() }
+                if (cap !in lineCount || cap in merge || cap in merge.values || k in merge.values) continue
+                if (prior?.aliases?.let { al -> al[cap] != null || al[k] != null || cap in al.values || k in al.values } == true) continue
+                if (genderOf(k) != null && genderOf(cap) != null && genderOf(k) != genderOf(cap)) continue
+                val (from, to) = if ((lineCount[k] ?: 0) >= (lineCount[cap] ?: 0)) cap to k else k to cap
+                if (nameGender[to] == null) genderOf(from)?.let { nameGender[to] = it }
+                merge[from] = to
+            }
+            if (merge.isEmpty()) return@run
+            fun resolve(n: String): String { var c = n; repeat(6) { c = merge[c] ?: return c }; return c }
+            for (i in out.indices) out[i].speaker?.let { sp ->
+                val to = resolve(sp)
+                if (to != sp) out[i] = out[i].copy(speaker = to, role = when (genderOf(to)) { G.M -> Role.MALE; G.F -> Role.FEMALE; null -> out[i].role })
+            }
+            for (from in merge.keys) {
+                val to = resolve(from)
+                lineCount[to] = (lineCount[to] ?: 0) + (lineCount.remove(from) ?: 0)
+                val a = mannerCount.remove(from)
+                if (a != null) { val b = mannerCount.getOrPut(to) { IntArray(a.size) }; for (k in a.indices) b[k] += a[k] }
+                if (from !in local) aliasOut[from] = to
+            }
+        }
+
+        // Two people talking: a line nobody was found for is the one whose turn it is. In a run of
+        // dash lines between the same two people the turns alternate, and the lines that are known
+        // (on either side — the first line of a talk is often named only by the reply: "— …
+        // — поторопил Аггиус Лорка") say whose turn each one is. A line calling one of them by name
+        // is the other's. Only gaps are filled, a known speaker is never changed, and a talk whose
+        // known lines do not alternate is left as it is. (Неучтённый‑3: «— А знаешь, Лорк, …» and
+        // the line after it were read in the common voice — one man speaking in two voices.)
+        run {
+            val starts = IntArray(paragraphs.size) { paragraphs[it].first }
+            fun parOf(pos: Int): Int {
+                var lo = 0; var hi = starts.size - 1; var ans = 0
+                while (lo <= hi) { val m = (lo + hi) ushr 1; if (starts[m] <= pos) { ans = m; lo = m + 1 } else hi = m - 1 }
+                return ans
+            }
+            // the speech of each paragraph: one turn
+            val turnSpans = java.util.TreeMap<Int, MutableList<Int>>()
+            for (i in out.indices) if (out[i].role != Role.NARRATOR) turnSpans.getOrPut(parOf(out[i].start)) { ArrayList() }.add(i)
+            fun dashTurn(par: Int): Boolean {
+                val (a, b) = paragraphs[par]
+                val t = text.substring(a, b).trimStart()
+                return t.isNotEmpty() && t[0] in "-—–"
+            }
+            fun breakBetween(p1: Int, p2: Int): Boolean {
+                var narration = 0
+                for (q in p1 + 1 until p2) {
+                    val (a, b) = paragraphs[q]
+                    val t = text.substring(a, b)
+                    if (t.contains("***") || t.contains("* * *")) return true
+                    narration += t.trim().length
+                }
+                return narration > 300
+            }
+            val blocks = ArrayList<MutableList<Int>>()
+            var prevPar = -1
+            for (par in turnSpans.keys) {
+                if (!dashTurn(par)) { prevPar = -1; continue }
+                if (prevPar < 0 || breakBetween(prevPar, par)) blocks.add(ArrayList())
+                blocks.last().add(par)
+                prevPar = par
+            }
+            for (block in blocks) {
+                if (block.size < 3) continue
+                // who says each turn (null: nobody known; "?" — two people in one paragraph)
+                val who = block.map { par ->
+                    val sp = turnSpans[par]!!.mapNotNull { out[it].speaker }.toSet()
+                    if (sp.size > 1) "?" else sp.firstOrNull()
+                }
+                if ("?" in who) continue
+                val known = who.filterNotNull().toSet()
+                if (known.size != 2) continue
+                val (a, b) = known.toList()
+                // the known turns must alternate: the same person an even number of turns apart
+                val idx = who.indices.filter { who[it] != null }
+                var alternates = true
+                for (k in 1 until idx.size) {
+                    val same = who[idx[k]] == who[idx[k - 1]]
+                    if (same != ((idx[k] - idx[k - 1]) % 2 == 0)) { alternates = false; break }
+                }
+                if (!alternates) continue
+                for (t in who.indices) {
+                    if (who[t] != null) continue
+                    // only where both sides say it: between two lines of the same person (A ? A)
+                    // (at the edges of a talk a third one — often the hero — may come in unnamed)
+                    val before = who.getOrNull(t - 1)
+                    val after = who.getOrNull(t + 1)
+                    val cand = if (before != null && before == after) (if (before == a) b else a) else continue
+                    val spans = turnSpans[block[t]]!!
+                    // the line's own sex (from "сказала", "я готов") must fit
+                    val lineG = spans.firstNotNullOfOrNull { when (out[it].role) { Role.MALE -> G.M; Role.FEMALE -> G.F; else -> null } }
+                    // (the hero: the sex of his own lines nearby — a chapter told by a woman must not lend him hers)
+                    val heroRole = if (cand == HERO) listOf(t - 1, t + 1, t - 2, t + 2).firstOrNull { who.getOrNull(it) == HERO }
+                        ?.let { turnSpans[block[it]]!!.firstOrNull()?.let { i -> out[i].role } } else null
+                    val candG = if (cand == HERO) when (heroRole) { Role.MALE -> G.M; Role.FEMALE -> G.F; else -> null } else genderOf(cand)
+                    if (lineG != null && candG != null && lineG != candG) continue
+                    // "— Лорк, …", "— Сноук, …" (his other name): not his own line
+                    val (pa, pb) = paragraphs[block[t]]
+                    val callsCand = WORD.findAll(text.substring(pa, pb)).any { m ->
+                        val c = canon(m.value) ?: m.value
+                        c == cand || aliasOut[c] == cand
+                    }
+                    if (callsCand) continue
+                    val role = if (cand == HERO) heroRole else when (candG) { G.M -> Role.MALE; G.F -> Role.FEMALE; null -> null }
+                    for (i in spans) out[i] = out[i].copy(speaker = cand, role = role ?: out[i].role)
+                    lineCount[cand] = (lineCount[cand] ?: 0) + 1
+                }
+            }
+        }
+
+        val characters = lineCount.entries.sortedByDescending { it.value }.map { (name, n) ->
+            val g = genderOf(name)
+            val counts = mannerCount[name] ?: IntArray(Manner.values().size)
+            val traits = ArrayList<String>()
+            var speed = 1.0f
+            if (name in ageOld) { speed *= 0.9f; traits.add("пожилой") }
+            if (name in ageYoung) { speed *= 1.08f; traits.add("ребёнок") }
+            if (name in machines) traits.add("машина")
+            val fast = counts[Manner.FAST.ordinal]
+            val slow = counts[Manner.SLOW.ordinal]
+            if (n >= 3 && fast * 3 >= n) { speed *= 1.1f; traits.add("говорит быстро") }
+            if (n >= 3 && slow * 3 >= n) { speed *= 0.9f; traits.add("говорит медленно") }
+            if (n >= 3 && counts[Manner.WHISPER.ordinal] * 3 >= n) traits.add("говорит тихо")
+            if (n >= 3 && counts[Manner.SHOUT.ordinal] * 3 >= n) traits.add("говорит громко")
+            Character(name, when (g) { G.M -> Role.MALE; G.F -> Role.FEMALE; null -> Role.SPEECH },
+                n, speed.coerceIn(0.85f, 1.15f), traits)
+        }
+        return Result(out, characters, aliasOut)
+    }
+
+    /**
+     * Apply the user's merges ("искин" → "896‑й"): speakers in the spans are renamed and
+     * the merged characters' lines and traits are combined under the target.
+     */
+    fun applyAliases(r: Result, aliases: Map<String, String>): Result {
+        if (aliases.isEmpty()) return r
+        fun resolve(n: String): String {
+            var cur = n
+            repeat(8) { cur = aliases[cur] ?: return cur }
+            return cur
+        }
+        val spans = r.spans.map { sp -> sp.speaker?.let { val t = resolve(it); if (t != it) sp.copy(speaker = t) else sp } ?: sp }
+        val byName = LinkedHashMap<String, MutableList<Character>>()
+        for (c in r.characters) byName.getOrPut(resolve(c.name)) { ArrayList() }.add(c)
+        val chars = byName.map { (name, group) ->
+            val total = group.sumOf { it.lines }
+            val own = group.firstOrNull { it.name == name }
+            val role = own?.role?.takeIf { it != Role.SPEECH }
+                ?: group.firstOrNull { it.role != Role.SPEECH }?.role ?: Role.SPEECH
+            val speed = (group.sumOf { (it.speed * it.lines).toDouble() } / total.coerceAtLeast(1)).toFloat()
+            Character(name, role, total, speed, group.flatMap { it.traits }.distinct())
+        }.sortedByDescending { it.lines }
+        return Result(spans, chars)
+    }
+
+    /** Pieces of one sentence ([offset] from [locate]); punctuation-only pieces are dropped. */
+    fun piecesOf(sentence: String, offset: Int, spans: List<Span>): List<Piece> {
+        if (offset < 0) return listOf(Piece(sentence, Role.NARRATOR, null, Manner.NORMAL))
+        val end = offset + sentence.length
+        val out = ArrayList<Piece>()
+        // spans are sorted and contiguous: jump to the first one that can overlap
+        var lo = 0
+        var hi = spans.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (spans[mid].end <= offset) lo = mid + 1 else hi = mid
+        }
+        for (k in lo until spans.size) {
+            val s = spans[k]
+            if (s.start >= end) break
+            val a = maxOf(s.start, offset)
+            val b = minOf(s.end, end)
+            if (a >= b) continue
+            val piece = sentence.substring(a - offset, b - offset).trim()
+            if (!piece.any { it.isLetterOrDigit() }) continue
+            val last = out.lastOrNull()
+            if (last != null && last.role == s.role && last.speaker == s.speaker && last.manner == s.manner) {
+                out[out.size - 1] = last.copy(text = last.text + " " + piece)
+            } else {
+                out.add(Piece(piece, s.role, s.speaker, s.manner))
+            }
+        }
+        return if (out.isEmpty()) listOf(Piece(sentence, Role.NARRATOR, null, Manner.NORMAL)) else out
+    }
+
+    /**
+     * Where each chunk the reader speaks lies in the original text. The reader's
+     * splitter glues sentences (and paragraphs) with spaces, adds a space before
+     * "!"/"?" and drops commas at its cuts, so chunks are matched on letters and
+     * digits only — robust to all of that. null = not found.
+     */
+    fun locateRanges(text: String, sentences: List<String>): List<IntRange?> {
+        val map = IntArray(text.length)
+        val sb = StringBuilder(text.length)
+        for ((i, c) in text.withIndex()) if (c.isLetterOrDigit()) { map[sb.length] = i; sb.append(c.lowercaseChar()) }
+        val norm = sb.toString()
+        var cursor = 0
+        return sentences.map { sentence ->
+            val ns = buildString { for (c in sentence) if (c.isLetterOrDigit()) append(c.lowercaseChar()) }
+            if (ns.isEmpty()) return@map null
+            val at = norm.indexOf(ns, cursor)
+            if (at < 0) return@map null
+            cursor = at + ns.length
+            val start = map[at]
+            var end = map[at + ns.length - 1] + 1
+            // keep the closing punctuation and quotes: "руках!»"
+            while (end < text.length && !text[end].isLetterOrDigit() && !text[end].isWhitespace()) end++
+            start until end
+        }
+    }
+
+    /** Pieces (from the ORIGINAL text) of the chunk at [range]; [fallback] is read by the narrator if not found. */
+    fun piecesIn(text: String, range: IntRange?, spans: List<Span>, fallback: String): List<Piece> {
+        if (range == null) return listOf(Piece(fallback, Role.NARRATOR, null, Manner.NORMAL))
+        val offset = range.first
+        val end = range.last + 1
+        val out = ArrayList<Piece>()
+        var lo = 0
+        var hi = spans.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (spans[mid].end <= offset) lo = mid + 1 else hi = mid
+        }
+        for (k in lo until spans.size) {
+            val s = spans[k]
+            if (s.start >= end) break
+            val a = maxOf(s.start, offset)
+            val b = minOf(s.end, end)
+            if (a >= b) continue
+            val piece = text.substring(a, b).trim()
+            if (!piece.any { it.isLetterOrDigit() }) continue
+            val last = out.lastOrNull()
+            if (last != null && last.role == s.role && last.speaker == s.speaker && last.manner == s.manner) {
+                out[out.size - 1] = last.copy(text = last.text + " " + piece)
+            } else {
+                out.add(Piece(piece, s.role, s.speaker, s.manner))
+            }
+        }
+        return if (out.isEmpty()) listOf(Piece(fallback, Role.NARRATOR, null, Manner.NORMAL)) else out
+    }
+
+    fun locate(text: String, sentences: List<String>): IntArray {
+        val res = IntArray(sentences.size) { -1 }
+        var cursor = 0
+        for ((i, s) in sentences.withIndex()) {
+            val probe = s.trim()
+            if (probe.isEmpty()) continue
+            val at = text.indexOf(probe, cursor)
+            if (at >= 0) { res[i] = at; cursor = at + probe.length }
+        }
+        return res
+    }
+
+    /** Speed factor and gain for a line's manner. */
+    fun mannerSpeed(m: Manner): Float = when (m) {
+        Manner.FAST -> 1.12f; Manner.SLOW -> 0.88f; Manner.WHISPER -> 0.95f; Manner.SHOUT -> 1.05f; else -> 1f
+    }
+
+    fun mannerGain(m: Manner): Float = when (m) {
+        Manner.WHISPER -> 0.7f; else -> 1f
+    }
+
+    // ------------------------------------------------------------ internals
+
+    private class Parsed(
+        val start: Int, val end: Int, val pieces: List<Triple<Int, Int, Boolean>>,
+        val quoted: Boolean = false   // «…» thoughts / messages, not a turn in a spoken exchange
+    ) {
+        val speech get() = pieces.filter { it.third }
+        fun spans(g: G?, speaker: String?, manner: Manner): List<Span> = pieces.map { (s, e, isSpeech) ->
+            if (!isSpeech) Span(s, e, Role.NARRATOR)
+            else Span(s, e, when (g) { G.M -> Role.MALE; G.F -> Role.FEMALE; null -> Role.SPEECH }, speaker, manner)
+        }
+    }
+
+    private class Hint(val name: String?, val noun: String?, val pronoun: G?, val verbGender: G?, val hero: Boolean = false)
+
+    /** "искина" → "искин", "Сети" → "Сеть", "896‑го" → "896‑й": base forms after "голос …". */
+    private fun baseForms(w: String): List<String> {
+        if (w.first().isDigit()) return listOf(normHyphen(w).substringBefore('-') + "-й", normHyphen(w))
+        val l = w.lowercase()
+        return listOf(l, l.dropLast(1), l.dropLast(1) + "ь", l.dropLast(1) + "а", l.dropLast(2))
+    }
+
+    /** Non-breaking and other hyphens → "-": "896‑й" and "896-й" are one name. */
+    private val NUMBERED_CASE = Regex("""^(\d+)-(го|му|м|ым|ом|й)$""")
+    /** Non-breaking and other hyphens → "-", numbered names to one form: "896‑му", "896-го" → "896-й". */
+    private fun normHyphen(w: String): String {
+        val h = w.replace('\u2011', '-').replace('\u2010', '-')
+        return NUMBERED_CASE.matchEntire(h)?.let { it.groupValues[1] + "-й" } ?: h
+    }
+
+    /**
+     * Capitalised words met in the text NOT at the start of a sentence ("сказал Пётр",
+     * "с Машей"): real names. "Стойте", "Думаю", "Промаявшись" open sentences only.
+     */
+    private val properTL = ThreadLocal<Set<String>>()
+    private val stemTL = ThreadLocal<Set<String>>()
+
+    private val adjEndings = listOf("ую", "юю", "ой", "ей", "ый", "ий", "ая", "яя", "ое", "ее", "ые", "ие", "ых", "их", "ым", "им", "ом", "ем", "ого", "его", "ому", "ему")
+
+    private fun afterPreposition(ws: List<String>, k: Int): Boolean {
+        val b1 = ws.getOrNull(k - 1)?.lowercase() ?: return false
+        if (b1 in prepositions) return true
+        val b2 = ws.getOrNull(k - 2)?.lowercase() ?: return false
+        return b2 in prepositions && adjEndings.any { b1.endsWith(it) }
+    }
+
+    /** A name the text uses in another case form inside sentences ("Анита" ← "Аните"). */
+    private fun properByStem(w: String): Boolean {
+        if (w.length < 4) return false
+        val st = stemTL.get() ?: return false
+        return w.dropLast(1) in st || w.dropLast(2) in st
+    }
+    private val MID_CAPS = Regex("""(?<=[\p{Ll}\d,;:)»”][\s\u00A0]{1,3})(\p{Lu}[\p{Ll}]+)""")
+    private fun isProper(w: String): Boolean =
+        w.isNotEmpty() && (w[0].isDigit() || (w.length in 2..5 && w.all { it.isUpperCase() }) ||   // "ИИ"
+            properTL.get()?.contains(w) != false)
+
+    private fun words(text: String, a: Int, b: Int): List<String> =
+        WORD.findAll(text.substring(a, b)).map { normHyphen(it.value) }.toList()
+
+    private fun authorPieces(text: String, p: Parsed): List<Pair<Int, Int>> =
+        p.pieces.filter { !it.third && text.substring(it.first, it.second).any { c -> c.isLetter() } }
+            .map { it.first to it.second }
+
+    private fun mannerOf(author: String): Manner {
+        val low = author.lowercase()
+        for ((stem, m) in mannerStems) if (low.contains(stem)) return m
+        return Manner.NORMAL
+    }
+
+    /**
+     * Who speaks in the «…» introduced by [intro] (the text before a colon): the owner of
+     * a voice ("голос 896‑го" → 896‑й), or the voice in the head ("в голове прозвучало").
+     */
+    private fun introSpeaker(intro: String): String? {
+        val t = intro.trim()
+        if (!t.endsWith(":")) return null
+        val lastSentence = t.substringAfterLast('.').substringAfterLast('!').substringAfterLast('?')
+        // "первое, что пришло в голову" is an idiom, not a voice in the head
+        val low = lastSentence.lowercase()
+            .replace(Regex("""в голову пришл[а-яё]*|пришл[а-яё]* (?:ей |ему |мне )?в голову|(?:на ум )?пришл[а-яё]* на ум"""), " ")
+        // "я задал вопрос:", "отдал мысленный приказ:" — the hero speaks or thinks (not "я услышал:")
+        val ws0 = WORD.findAll(lastSentence).map { it.value }.toList()
+        // "Анита от неожиданности ответила первое, что пришло в голову:" — a person answers aloud
+        // (a name as the first word was not seen as "someone named", and the line went to the hero
+        // or to the voice in the head)
+        val subj = hint(ws0.map { normHyphen(it) })
+        if (!subj.hero && !low.contains("голос") && speechStems.any { low.contains(it) } &&
+            (subj.name != null || subj.noun != null || subj.pronoun != null ||
+                // a capitalised first word that is not a verb: most likely the speaker's name
+                (ws0.isNotEmpty() && isNameWord(ws0[0]) && pastGender(ws0[0], true) == null))) return null
+        val hears = listOf("услыш", "прозвуч", "раздал", "высветил", "увидел", "прочитал", "прочёл", "пришло", "голос")
+        val speaks = listOf("спросил", "задал", "приказ", "попросил", "подумал", "мысленно", "обратился",
+            "уточнил", "уточнить", "сказал", "ответил", "распорядил", "скомандовал", "задумал")
+        val someoneNamed = ws0.drop(1).any { it[0].isUpperCase() && it != "Я" } || ws0.any { it.lowercase() in speakerNouns }
+        val third = ws0.any { it.lowercase() in setOf("он", "она", "они", "оно") }
+        if (hears.none { low.contains(it) } && !someoneNamed && !third &&
+            (ws0.any { it.lowercase() == "я" } || speaks.any { low.contains(it) })) return HERO
+        if (systemCues.none { low.contains(it) }) return null
+        val ws = WORD.findAll(lastSentence).map { normHyphen(it.value) }.toList()
+        val vi = ws.indexOfFirst { it.lowercase() == "голос" }
+        val owner = if (vi >= 0) ws.getOrNull(vi + 1) else null
+        if (owner != null) {
+            val forms = baseForms(owner)
+            forms.firstOrNull { it in speakerNouns }?.let { return it }
+            if (owner[0].isDigit()) return forms.first()
+            if (owner[0].isUpperCase()) return forms.first().replaceFirstChar { it.uppercase() }
+        }
+        return SYSTEM
+    }
+
+    /**
+     * A narration paragraph that ends by introducing the next line ("Она сказала:",
+     * "Лена улыбнулась:", "Девушка ответила, что ей всё равно, и добавила:"): who speaks —
+     * a name, a role noun or "он/она", or at least a speech verb with its gender.
+     */
+    private fun speakerIntro(par: String, oblique: (String) -> Boolean = { false }, genderOfWord: (String) -> G? = { null }): Hint? {
+        val t = par.trim()
+        if (!t.endsWith(":")) return null
+        val last = t.dropLast(1).split(Regex("""(?<=[.!?…])\s+""")).last()
+        val ws = WORD.findAll(last).map { normHyphen(it.value) }.toList()
+        if (ws.isEmpty() || ws.size > 40) return null
+        // the last clause first: "Магик не ответил…, и Сеть на этот счёт выдала свой комментарий:"
+        val lastClause = last.split(Regex(""",\s+(?:и|а|но)\s+|;\s+""")).last()
+        if (lastClause.length < last.length) {
+            val cw = WORD.findAll(lastClause).map { normHyphen(it.value) }.toList()
+            val ch = hint(cw, oblique, genderOfWord, intro = true)
+            if (!ch.hero && (ch.name != null || ch.noun != null)) return ch
+        }
+        val h = hint(ws, oblique, genderOfWord, intro = true)
+        if (h.hero) return null
+        if (h.name != null || h.noun != null || h.pronoun != null) return h
+        val low = last.lowercase()
+        return if (h.verbGender != null && speechStems.any { low.contains(it) }) h else null
+    }
+
+    /**
+     * A short action beat: the subject, then its past-tense verb ("Она кивнула.", "Вера
+     * улыбнулась и отвернулась.", "Я пожал плечами.") — a bare line right after it is the
+     * subject's in most books.
+     */
+    private fun actionBeat(par: String): Hint? {
+        val t = par.trim()
+        if (t.length > 140 || t.endsWith(":") || t.any { it in quotePairs.keys }) return null
+        val ws = WORD.findAll(t).map { normHyphen(it.value) }.toList()
+        if (ws.size < 2) return null
+        val subj = ws[0]
+        val low = subj.lowercase()
+        val verbG = (1..minOf(3, ws.size - 1)).firstNotNullOfOrNull { pastGender(ws[it], false) } ?: return null
+        return when {
+            // "Я пожал плечами." — no: in a first-person book the narrator does everything
+            low == "я" -> null
+            low == "он" -> if (verbG == G.M) Hint(null, null, G.M, verbG) else null
+            low == "она" -> if (verbG == G.F) Hint(null, null, G.F, verbG) else null
+            low in speakerNouns -> if (speakerNouns[low] == null || speakerNouns[low] == verbG) Hint(null, low, null, verbG) else null
+            isNameWord(subj) && isProper(subj) -> Hint(subj, null, null, verbG)
+            else -> null
+        }
+    }
+
+    /** Short forms that agree with the speaker: "я готов / готова", "я рад / рада"… */
+    private val selfForms: Map<String, G> = buildMap {
+        for (w in listOf("готов", "рад", "должен", "уверен", "согласен", "свободен", "занят", "нужен", "способен",
+                "обязан", "счастлив", "болен", "виноват", "благодарен", "доволен", "знаком", "женат", "сам", "один", "намерен"))
+            put(w, G.M)
+        for (w in listOf("готова", "рада", "должна", "уверена", "согласна", "свободна", "занята", "нужна", "способна",
+                "обязана", "счастлива", "больна", "виновата", "благодарна", "довольна", "знакома", "замужем", "сама", "одна", "намерена"))
+            put(w, G.F)
+    }
+    private val otherSubjects = setOf("он", "она", "оно", "они", "ты", "вы", "мы", "кто", "что", "который", "которая", "которые", "это")
+    private val selfFillers = setOf("не", "уже", "тоже", "же", "всё", "все", "ещё", "еще", "бы", "так", "вам", "тебе", "вас",
+        "очень", "вполне", "совсем", "просто", "ведь", "и", "лично", "сейчас", "теперь", "только", "конечно")
+
+    /**
+     * Gender the speaker shows about themself in [speech]: "я" followed (within a couple
+     * of small words, in the same clause) by a past-tense verb or a short adjective form.
+     */
+    // "с таким защитником, как я", "такую, как я", "такой красавицы, как я" — the speaker
+    // compares someone to themself, and the word before "как я" shows their sex
+    private val LIKE_ME = Regex("""(?iu)(?<![а-яё])(таким|такому|такого|таком|такой|такую|такая|такие|такими)(?:\s+([а-яё]+))?\s*,?\s+как\s+я(?![а-яё])""")
+    // "я твой отец", "я ваша мама", "я же твоя сестра"
+    private val I_YOUR = Regex("""(?iu)(?<![а-яё])я(?:\s+(?:же|ведь|всё-таки|тоже|и))?\s+(твой|ваш|твоя|ваша)\s+[а-яё]+""")
+
+    private fun likeMe(speech: String): G? {
+        var m = false; var f = false
+        for (x in LIKE_ME.findAll(speech)) {
+            val adj = x.groupValues[1].lowercase()
+            val noun = x.groupValues[2].lowercase()
+            when (adj) {
+                "таким", "такому", "такого", "таком" -> m = true            // masculine (a person: not neuter)
+                "такую", "такая" -> f = true
+                "такой" -> when {
+                    // "такой защитник, как я" (he) / "с такой защитницей, как я" (she)
+                    noun.isEmpty() -> {}                                     // "такой, как я": either
+                    Regex("(ой|ей|ою|ею)$").containsMatchIn(noun) -> f = true
+                    Regex("[бвгджзйклмнпрстфхцчшщь]$").containsMatchIn(noun) -> m = true
+                }
+                // "таких, как я" / "такими" — plural, says nothing
+            }
+        }
+        for (x in I_YOUR.findAll(speech)) {
+            if (x.groupValues[1].lowercase() in setOf("твой", "ваш")) m = true else f = true
+        }
+        return if (m && !f) G.M else if (f && !m) G.F else null
+    }
+
+    /** The sex the author words give their speaker: their first past-tense verb («спросила она», «ответил Пётр»); for RoleModel (1.56). */
+    fun remarkSex(author: String): Role? {
+        val ws = WORD.findAll(author).map { it.value }.toList()
+        return when (ws.withIndex().firstNotNullOfOrNull { (i, w) -> pastGender(w, i == 0) }) {
+            G.M -> Role.MALE; G.F -> Role.FEMALE; null -> null
+        }
+    }
+
+    /** The speaker's sex by the line itself («я пришла», «я готов»), or null; for RoleModel (1.56). */
+    fun selfSex(speech: String): Role? = when (selfGender(speech)) { G.M -> Role.MALE; G.F -> Role.FEMALE; null -> null }
+
+    private fun consonantPast(w: String): G? = when {
+        w.endsWith("шла") && w.length >= 3 -> G.F                                           // пришла, ушла, шла
+        w.endsWith("гла") && w.length > 3 && w != "игла" && w != "мгла" -> G.F           // могла, легла
+        w == "мог" || w.endsWith("смог") || w.endsWith("омог") || w == "лёг" || w == "лег" -> G.M
+        else -> null
+    }
+
+    private fun selfGender(speech: String): G? {
+        var m: G? = likeMe(speech)?.takeIf { it == G.M }
+        var f: G? = likeMe(speech)?.takeIf { it == G.F }
+        for (clause in speech.split(Regex("""[,.!?;:…—–«»"()]+"""))) {
+            val ws = WORD.findAll(clause).map { it.value }.toList()
+            for (i in ws.indices) {
+                if (ws[i].lowercase() != "я") continue
+                var j = i + 1
+                var steps = 0
+                // a few words may stand between: "я не готов", "я точно знал", "я вас ждала" —
+                // but not another subject ("я думаю он пришёл")
+                var others = 0
+                while (j < ws.size && steps < 5) {
+                    val w = ws[j].lowercase()
+                    if (w in otherSubjects) break
+                    // …and «я пришла», «я могла», «я мог»: past forms with a consonant stem, not taken for verbs
+                    // elsewhere (1.56; only here — in the narration they would change more than they mend)
+                    val g = selfForms[w] ?: pastGender(ws[j], false) ?: consonantPast(w)
+                    if (g != null) { if (g == G.M) m = G.M else f = G.F; break }
+                    if (w !in selfFillers && ++others > 2) break
+                    j++; steps++
+                }
+            }
+        }
+        // both in one line ("я сказал, что она была…" never gives "я" a feminine form) — trust neither
+        return if (m != null && f != null) null else m ?: f
+    }
+
+    /** "Почему ты так решил?", "ты готова?", "ты сама" — the one spoken to (who answers next) is a man / a woman. */
+    private val YOU_FORM = Regex("""(?iu)(?<![а-яё])ты\s+(?:(?:же|ведь|уже|тоже|не|так|всё|все|ещё|еще|и|бы|что|вот|сейчас|точно|правда)\s+){0,2}([а-яё]+)""")
+    private fun addresseeGender(speech: String): G? {
+        var m = false; var f = false
+        for (x in YOU_FORM.findAll(speech)) {
+            val w = x.groupValues[1]
+            val g = selfForms[w.lowercase()] ?: pastGender(w, false) ?: continue
+            if (g == G.M) m = true else f = true
+        }
+        return if (m && !f) G.M else if (f && !m) G.F else null
+    }
+
+    /** A group called ("Значит так, девочки мои", "Ребята, …"): in a first-person book, mostly the hero speaking. */
+    private val GROUP_CALL = Regex("""(?iu)(?:^|[,!?.…]\s*)(девочки|девчонки|ребята|парни|мужики|друзья|дамы|господа|народ|команда|дорогие)(?:\s+мои)?\s*(?=[,!?.…]|$)""")
+
+    /** "продолжил", "добавила": the same person goes on. */
+    private val continueStems = listOf("продолжи", "добави", "дополни", "закончи")
+
+    private val prepositions = setOf("на", "в", "во", "к", "ко", "у", "от", "с", "со", "за", "о", "об", "обо", "про",
+        "для", "при", "по", "над", "под", "перед", "без", "из", "до", "через", "около", "возле", "между", "мимо", "после")
+    private val maleTitles = setOf("капитан", "командир", "господин", "лейтенант", "майор", "полковник", "генерал",
+        "сержант", "адмирал", "сэр", "мистер", "лорд", "граф", "князь", "барон", "король", "принц", "император",
+        "брат", "дядя", "дед", "отец", "старик", "парень", "мужчина", "капитана", "командира", "господина")
+    private val femaleTitles = setOf("госпожа", "леди", "мисс", "миссис", "мадам", "графиня", "княгиня", "баронесса",
+        "королева", "принцесса", "императрица", "сестра", "тётя", "тетя", "бабушка", "девушка", "женщина", "госпожи")
+
+    /** Family words used to call someone → the role nouns that person goes by in a book. */
+    private val kinVocatives: Map<String, List<String>> = buildMap {
+        for (k in listOf("мама", "мать")) put(k, listOf("мать", "мама"))
+        for (k in listOf("папа", "отец")) put(k, listOf("отец", "папа"))
+        for (k in listOf("дочка", "дочь")) put(k, listOf("дочь", "девочка", "дочка"))
+        for (k in listOf("сын")) put(k, listOf("сын", "мальчик"))
+        put("девочка", listOf("девочка", "дочь"))
+        put("мальчик", listOf("мальчик", "сын"))
+        put("бабушка", listOf("бабушка", "старуха"))
+        put("дедушка", listOf("дед", "дедушка", "старик"))
+    }
+
+    /** One name per person: "мама" and "мать" are the same character. */
+    private val kinCanon = mapOf("мама" to "мать", "матушка" to "мать", "мамочка" to "мать", "папа" to "отец",
+        "батюшка" to "отец", "дочка" to "дочь", "сынок" to "сын", "дедушка" to "дед")
+
+    /** "мамочка", "мам", "доченьку" → "мама", "дочка"… (the keys of [kinVocatives]). */
+    private fun kinKey(w: String): String = when {
+        w.startsWith("мам") -> "мама"
+        w.startsWith("пап") -> "папа"
+        w.startsWith("доч") -> "дочка"
+        w.startsWith("сын") -> "сын"
+        w.startsWith("девочк") -> "девочка"
+        w.startsWith("мальчик") -> "мальчик"
+        w.startsWith("бабу") -> "бабушка"
+        w.startsWith("дед") -> "дедушка"
+        else -> w
+    }
+
+    private val speechStems = listOf("сказа", "ответи", "спроси", "произн", "добави", "крикн", "закрича",
+        "прошепт", "пробормот", "воскликн", "заяви", "проговори", "продолжи", "повтори", "попроси",
+        "возрази", "шепну", "буркн", "огрызн", "отрезал", "сообщи", "объясни", "предложи", "велел", "приказа")
+
+    /** Gender of a past-tense verb ("сказал", "спросила", "усмехнулся", "произнёс"), or null. */
+    private fun pastGender(w: String, first: Boolean): G? {
+        val lw = w.lowercase()
+        if (lw.length < 3 || (w[0].isUpperCase() && !first) || w[0].isDigit()) return null
+        return when {
+            lw.endsWith("лась") -> G.F
+            lw.endsWith("лся") -> G.M
+            lw.endsWith("ла") && isVerbLike(lw) -> G.F
+            lw.endsWith("л") && isVerbLike(lw) -> G.M
+            lw.length >= 5 && (lw.endsWith("ёс") || lw.endsWith("нес")) -> G.M   // произнёс, принёс
+            else -> null
+        }
+    }
+
+    private fun isNameWord(w: String) =
+        // two letters only for acronyms ("ИИ"): "На", "По", "Ну" open sentences, they are not names
+        (w.length >= 3 || w.all { it.isUpperCase() }) && w.length >= 2 &&
+            (w[0].isUpperCase() || w[0].isDigit()) && w !in notNames && w != "Я" && w.lowercase() !in HONOR
+
+    /**
+     * Who the author words point at. Russian puts the speaker next to the speech
+     * verb ("уточнил я", "спросил искин", "Пётр кивнул"), so verb+neighbour pairs
+     * are tried first across the whole phrase; then a name / role noun anywhere
+     * (often at the very end: "…решил оставить последнее слово за собой искин").
+     */
+    private fun hint(ws: List<String>, oblique: (String) -> Boolean = { false }, genderOfWord: (String) -> G? = { null },
+                     intro: Boolean = false): Hint {
+        val head = ws.take(16)
+        // the subject agrees with its verb: "продолжил … глава поселка, пока женщина покидала"
+        // is not the woman's line; "Лорка" (an oblique form: "увидев … Лорка, продолжил") is
+        // not who speaks
+        fun fits(w: String, g: G?): Boolean {
+            if (oblique(w)) return false
+            val wg = genderOfWord(w) ?: return true
+            return g == null || wg == g
+        }
+        // "голос искина", "голос Сети": the owner of the voice speaks
+        val voiceIdx = head.indexOfFirst { it.lowercase() == "голос" }
+        val owner = if (voiceIdx >= 0) head.getOrNull(voiceIdx + 1) else null
+        var firstVerbG: G? = null
+        if (owner != null) {
+            val forms = baseForms(owner)
+            val g = (0 until voiceIdx).firstNotNullOfOrNull { pastGender(head[it], it == 0) }
+            forms.firstOrNull { it in speakerNouns }?.let { return Hint(null, it, null, g) }
+            if (owner[0].isUpperCase() || owner[0].isDigit()) {
+                val nm = if (owner[0].isDigit()) forms.first() else forms.first().replaceFirstChar { it.uppercase() }
+                return Hint(nm, null, null, g)
+            }
+        }
+        // the speech verb's gender: another pair of the other sex is some other action
+        // ("продолжил свою речь глава поселка, пока женщина покидала кабинет")
+        // author words after a line start with it ("— …, — успокоил я Ньютона. … Сеть предложила…");
+        // an introduction ends with it ("Девушка, …из которой я не выбрался…, предложила:")
+        val speechG = if (intro) ws.withIndex().lastOrNull { (i, w) -> pastGender(w, i == 0) != null }?.let { (i, w) -> pastGender(w, i == 0) }
+            else head.withIndex().firstNotNullOfOrNull { (i, w) -> pastGender(w, i == 0) }
+        for (i in head.indices) {
+            val g = pastGender(head[i], i == 0) ?: continue
+            if (firstVerbG == null) firstVerbG = g
+            if (speechG != null && g != speechG) continue
+            for (n in listOf(i + 1, i - 1)) {
+                val w = head.getOrNull(n) ?: continue
+                val lw = w.lowercase()
+                // "подняв глаза на Рокута, спросила", "через локальную сеть" — after a preposition
+                // (an adjective may stand between) it is not who speaks
+                if (afterPreposition(head, n)) continue
+                when {
+                    // «ответил мистер Беннет»: the name after the honorific
+                    lw in HONOR && head.getOrNull(n + 1)?.let { isNameWord(it) && fits(it, g) } == true && n >= i ->
+                        return Hint(honored(head, n + 1), null, null, g)
+                    lw == "я" -> return Hint(null, null, null, g, hero = true)
+                    lw in speakerNouns && (speakerNouns[lw] == null || speakerNouns[lw] == g) -> return Hint(null, lw, null, g)
+                    lw == "он" -> return Hint(null, null, G.M, g)
+                    lw == "она" -> return Hint(null, null, G.F, g)
+                    isNameWord(w) && isProper(w) && pastGender(w, false) == null && fits(w, g) -> return Hint(honored(head, n) ?: w, null, null, g)
+                }
+            }
+        }
+        // the speech verb's sex when there is one ("…из которой я не выбрался…, предложила" is hers)
+        val tagG = speechG ?: firstVerbG
+        // no verb+subject pair: a name, then a role noun (the last one), then pronouns
+        // the first word too ("— …? — Андрей хмурится"): isProper keeps out "Наконец", "Промаявшись"
+        // not after a preposition ("на Рокута"); the first word counts when a verb follows it
+        // ("Анита ещё раз посмотрела…", a name the text shows only at sentence starts)
+        head.withIndex().firstOrNull { (k, w) ->
+            isNameWord(w) && head.getOrNull(k - 1)?.lowercase() !in prepositions && fits(w, tagG) &&
+                // "цитировать Гагарина": the object of a verb, not its subject
+                (tagG != null || head.getOrNull(k - 1)?.lowercase()?.let { pw -> pw.endsWith("ть") || pw.endsWith("ться") || pw.endsWith("ти") } != true) &&
+                (isProper(w) || (k == 0 && properByStem(w) && pastGender(w, true) == null &&
+                    // not a gerund ("Решив", "Обернувшись")
+                    listOf("ив", "ав", "ыв", "ув", "вши", "вшись").none { e -> w.lowercase().endsWith(e) } &&
+                    (1..5).any { d -> head.getOrNull(d)?.let { pastGender(it, false) } != null }))
+        }?.let { return Hint(honored(head, it.index) ?: it.value, null, null, tagG) }
+        head.withIndex().lastOrNull { (k, w) -> w.lowercase() in speakerNouns && !afterPreposition(head, k) &&
+                (tagG == null || speakerNouns[w.lowercase()] == null || speakerNouns[w.lowercase()] == tagG) }
+            ?.let { return Hint(null, it.value.lowercase(), null, tagG) }
+        for (w in head.take(4)) when (w.lowercase()) {
+            "он" -> return Hint(null, null, G.M, tagG)
+            "она" -> return Hint(null, null, G.F, tagG)
+        }
+        if (head.take(6).any { it == "я" || it == "Я" }) return Hint(null, null, null, tagG, hero = true)
+        return Hint(null, null, null, tagG)
+    }
+
+    /** Machines and acronyms ("ИИ", "компьютер") are rarely what "он/она" refers to. */
+    /**
+     * "подумал разведчик", "был скрытый вызов": the word after the past-tense verb is its subject
+     * (a noun or an adjective in the nominative) — not "протранслировал ему", "проговорил про себя",
+     * "раздал указания".
+     */
+    private fun subjectAfterVerb(ws: List<String>): Boolean {
+        val k = ws.indexOfFirst { PAST_VERB.matches(it.lowercase()) }
+        // the verb opens the author words ("мысленно протранслировал", "рассмотрев противника, проговорил");
+        // further on it is some other sentence, not "(я) сказал"
+        if (k < 0 || k > 2) return true
+        val next = ws.getOrNull(k + 1)?.lowercase() ?: return false
+        if (next in SOMEONE) return true
+        if (next in SMALL_WORDS) return false
+        return next.last() in "бвгджзклмнпрстфхцчшщ" || next.endsWith("ый") || next.endsWith("ий") || next.endsWith("ой")
+    }
+    private val PAST_VERB = Regex("[а-яё]{2,}(л|ла|лся|лась)")
+    private val SOMEONE = setOf("некто", "кто-то", "кто-нибудь", "никто", "нечто", "что-то", "все", "всё", "каждый", "один", "одна", "голос")
+    private val SMALL_WORDS = setOf("про", "в", "во", "на", "с", "со", "к", "ко", "у", "от", "за", "из", "без", "под", "над", "при",
+        "по", "для", "до", "о", "об", "обо", "не", "же", "бы", "ли", "уж", "вслух", "всем", "нам", "вам", "им", "ему", "ей", "себе", "мой", "свой")
+
+    private fun isHuman(speaker: String): Boolean =
+        speaker != HERO && speaker != SYSTEM && speaker !in machines && !(speaker.length <= 4 && speaker.all { it.isUpperCase() }) &&
+            !speaker.first().isDigit()
+
+    private fun isVerbLike(w: String): Boolean {
+        if (w in notVerbs) return false
+        val stem = if (w.endsWith("ла")) w.dropLast(2) else w.dropLast(1)
+        return (stem.lastOrNull() ?: return false) in "аеиоуыэюяё"
+    }
+
+    private fun paragraphRanges(text: String): List<Pair<Int, Int>> {
+        val res = ArrayList<Pair<Int, Int>>()
+        var start = 0
+        for (i in 0..text.length) {
+            if (i == text.length || text[i] == '\n') {
+                if (i > start) res.add(start to i)
+                start = i + 1
+            }
+        }
+        return joinQuoteParagraphs(text, res)
+    }
+
+    /** A «…» message that runs over several lines ("«Принято.\nДля задачи нужны значения».")
+     *  is one paragraph: otherwise its lines are read by the narrator. */
+    private fun joinQuoteParagraphs(text: String, ps: List<Pair<Int, Int>>): List<Pair<Int, Int>> {
+        fun balance(a: Int, b: Int): Int {
+            var d = 0
+            for (k in a until b) { if (text[k] == '«') d++ else if (text[k] == '»') d-- }
+            return d
+        }
+        val res = ArrayList<Pair<Int, Int>>()
+        var i = 0
+        while (i < ps.size) {
+            val (s, e) = ps[i]
+            var k = s
+            while (k < e && text[k].isWhitespace()) k++
+            var d = if (k < e && text[k] == '«') balance(s, e) else 0
+            var j = i
+            if (d > 0) {
+                while (j + 1 < ps.size && j - i < 30 && ps[j + 1].second - s < 4000) {
+                    j++
+                    d += balance(ps[j].first, ps[j].second)
+                    if (d <= 0) break
+                }
+                if (d != 0) j = i   // never closed: leave the lines alone
+            }
+            res.add(s to ps[j].second)
+            i = j + 1
+        }
+        return res
+    }
+
+    private fun parseParagraph(text: String, start: Int, end: Int): Parsed {
+        var s = start
+        while (s < end && text[s].isWhitespace()) s++
+        if (s >= end) return Parsed(start, end, listOf(Triple(start, end, false)))
+        if (text[s] in dashes) return parseDash(text, start, s, end)
+        // a line can also start inside a paragraph: "…и сказала: — Держи себя в руках!"
+        // or "Гусеница помолчала. — Держи себя в руках, — сказала она."
+        val inner = INNER_DASH_LINE.find(text.substring(start, end))
+        // «…, – отдал я распоряжение. И тут до меня дошло. – А можно ли …?» – спросил я у Искателя.
+        // — the dashes are inside the quote: the author's words put into it, not a new line (it went
+        // to nobody, and was read in another voice than the hero's)
+        val firstClose = if (text[s] in quotePairs) closeOf(text, s, end).takeIf { it > s } else null
+        if (inner != null && firstClose != null && start + inner.range.first > s && start + inner.range.first < firstClose)
+            return parseQuotes(text, start, end)
+        if (inner != null) {
+            val dashAt = start + inner.range.first + inner.value.indexOfFirst { it in dashes }
+            val before = text.substring(start, dashAt)
+            // quotes in the narration part keep working ("Он сказал: «…»")
+            val head = if (before.any { it in quotePairs.keys }) parseQuotes(text, start, dashAt).pieces
+                       else listOf(Triple(start, dashAt, false))
+            val rest = parseDash(text, dashAt, dashAt, end).pieces
+            return Parsed(start, end, head + rest)
+        }
+        return parseQuotes(text, start, end)
+    }
+
+    private fun parseDash(text: String, pStart: Int, dashAt: Int, end: Int): Parsed {
+        val pieces = ArrayList<Triple<Int, Int, Boolean>>()
+        pieces.add(Triple(pStart, dashAt + 1, false))
+        var speech = true
+        var pos = dashAt + 1
+        for (m in SPACED_DASH.findAll(text.substring(dashAt + 1, end))) {
+            val a = dashAt + 1 + m.range.first
+            val b = dashAt + 1 + m.range.last + 1
+            val last = text.substring(pos, a).trimEnd().lastOrNull()
+            var toggle = if (speech) last != null && last in ",.!?…:;" else last != null && last in ",.:"
+            // a dash inside the speech, after a comma: «…что можно было сделать, столкнувшись с ними, –
+            // это убежать. Они не могут…» — not the author's words; taken for them, every later part
+            // of the line went to the other voice (tolyos, 4PDA)
+            if (toggle && speech && last == ',' && !authorAhead(text, b, end)) toggle = false
+            if (toggle) {
+                pieces.add(Triple(pos, a, speech))
+                pieces.add(Triple(a, b, false))
+                pos = b
+                speech = !speech
+            }
+        }
+        pieces.add(Triple(pos, end, speech))
+        return Parsed(pStart, end, pieces)
+    }
+
+    /**
+     * Do the words from [from] look like the author's? Not when they go on the speaker's sentence the
+     * way a dash in speech does — «Единственное, что можно было сделать, – это убежать», «Всё, что ты
+     * видишь, – это…», «…хочу добавить, – что он…»: after a comma-dash the author's words never begin
+     * with «это», «то», «что» (unless a verb of saying follows at once: «– это сказал он»).
+     */
+    private fun authorAhead(text: String, from: Int, end: Int): Boolean {
+        val words = Regex("[А-Яа-яЁё]+").findAll(text.substring(from, minOf(end, from + 120))).map { it.value.lowercase() }.take(3).toList()
+        if (words.isEmpty() || words[0] !in setOf("это", "то", "что")) return true
+        return words.drop(1).any { w -> w.length >= 4 && listOf("л", "ла", "ли", "ло", "лся", "лась", "лись", "лось").any { w.endsWith(it) } }
+    }
+
+    /** Opening quote → its closing pair: «ёлочки», „лапки“, “English”, "straight". */
+    private val quotePairs = mapOf('«' to '»', '„' to '“', '“' to '”', '"' to '"')
+
+    /**
+     * A quote with the author's words put into it by dashes: «Всё понятно, – отдал я распоряжение. –
+     * А можно ли…?» — the speech, the author's words, the speech again (as a dash line is cut).
+     */
+    private fun quoteInserts(text: String, a: Int, b: Int): List<Triple<Int, Int, Boolean>> {
+        val out = ArrayList<Triple<Int, Int, Boolean>>()
+        var speech = true
+        var pos = a
+        for (m in SPACED_DASH.findAll(text.substring(a, b))) {
+            val x = a + m.range.first
+            val y = a + m.range.last + 1
+            val last = text.substring(pos, x).trimEnd().lastOrNull()
+            var toggle = if (speech) last != null && last in ",.!?…:;" else last != null && last in ",.:"
+            if (toggle && speech && last == ',' && !authorAhead(text, y, b)) toggle = false   // «…, – это…» inside the speech
+            if (toggle) { out.add(Triple(pos, x, speech)); out.add(Triple(x, y, false)); pos = y; speech = !speech }
+        }
+        if (out.isEmpty()) return listOf(Triple(a, b, true))
+        out.add(Triple(pos, b, speech))
+        return out
+    }
+
+    /**
+     * Where the quote opened at [i] closes (before [end]), or -1: quotes inside it counted —
+     * «… рубку «Драккара» и понять …» closes at the last », not after "Драккара".
+     */
+    private fun closeOf(text: String, i: Int, end: Int): Int {
+        val open = text[i]
+        val close = quotePairs[open] ?: return -1
+        if (open == close) return text.indexOf(close, i + 1).let { if (it < 0 || it >= end) -1 else it }
+        var depth = 0
+        for (k in i until end) {
+            if (text[k] == open) depth++
+            else if (text[k] == close) { depth--; if (depth == 0) return k }
+        }
+        // unbalanced: the first closing one, as before
+        return text.indexOf(close, i + 1).let { if (it < 0 || it >= end) -1 else it }
+    }
+
+    private fun parseQuotes(text: String, start: Int, end: Int): Parsed {
+        val pieces = ArrayList<Triple<Int, Int, Boolean>>()
+        var pos = start
+        var i = start
+        var lastSpeechEnd = -1
+        while (i < end) {
+            val close = quotePairs[text[i]]
+            if (close != null) {
+                val at = closeOf(text, i, end)
+                if (at < 0) break
+                val before = text.substring(start, i).trimEnd()
+                // «Ты опоздал», – сказала она. «Опять». — the line goes on after the author words
+                val gap = if (lastSpeechEnd >= 0) text.substring(lastSpeechEnd, i).trim() else ""
+                val continued = lastSpeechEnd >= 0 && gap.length < 160 &&
+                    gap.trimStart(',', '.', '!', '?', '…', ' ').firstOrNull()?.let { it in dashes } == true
+                if (before.isEmpty() || before.endsWith(":") || continued) {
+                    if (i > pos) pieces.add(Triple(pos, i, false))
+                    pieces.addAll(quoteInserts(text, i, at + 1))
+                    pos = at + 1
+                    lastSpeechEnd = at + 1
+                }
+                i = at + 1
+                continue
+            }
+            i++
+        }
+        if (pos < end) pieces.add(Triple(pos, end, false))
+        return Parsed(start, end, pieces, quoted = true)
+    }
+}
