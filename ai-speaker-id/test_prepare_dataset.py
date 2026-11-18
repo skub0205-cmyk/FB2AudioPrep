@@ -52,6 +52,30 @@ class DatasetPreparationTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["speaker"], "Самуру")
 
+    def test_fb2_xml_is_read_as_paragraph_text(self):
+        import tempfile
+        xml = (
+            '<?xml version="1.0" encoding="utf-8"?>'
+            '<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">'
+            '<body><section><p>— Привет! — сказал <emphasis>Дима</emphasis>.</p>'
+            '<p>«Нико, добро пожаловать!» — раздался женский голос.</p>'
+            '</section></body></FictionBook>'
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sample.fb2"
+            path.write_text(xml, encoding="utf-8")
+            text = module.decode_book(path)
+        self.assertIn("сказал Дима", text)
+        self.assertIn("раздался женский голос", text)
+        self.assertEqual(len(module.paragraphs_of(text)), 2)
+
+    def test_stress_marked_speaker_name_is_recognized(self):
+        rows, unresolved, candidates, _ = self.extract(
+            "— Поправь меня. — задумчиво произнёс Артём."
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["speaker"], "Артём")
+
     def test_literal_escaped_newlines_are_split_into_paragraphs(self):
         paragraphs = module.paragraphs_of(
             "Начало.\\nПродолжение.\\n\\n— Привет! — сказал Дима."
