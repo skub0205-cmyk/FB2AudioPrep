@@ -59,3 +59,15 @@ Before a model is enabled by default:
 - compare against human annotations, not just another model's predictions;
 - include regression tests for the user's examples (Niko and IsKin) and stress ambiguities;
 - make model download optional and keep inference entirely local after download.
+
+## 5. Model installation and analysis must be separate actions
+
+User acceptance requirement (November 2026):
+- Downloading/installing the dialogue role model must **never automatically start dialogue recognition**.
+- After a successful download, show a short confirmation that the model is ready and return to the book screen / analysis screen in an idle state.
+- Keep the currently opened book and its selection/state; do not silently launch a long-running task.
+- Dialogue recognition starts only after the user explicitly presses the **“Проверить диалоги”** action.
+- If the user requests analysis before the model is installed, explain that the model is required and offer a separate **“Загрузить модель”** action. Once download finishes, wait for a second explicit tap on **“Проверить диалоги”**; do not chain download completion into analysis.
+- On subsequent launches, model presence must not trigger analysis. Loading or initializing the model is not the same as running book analysis.
+- Keep download progress and analysis progress as separate indicators with separate cancellation/lifecycle handling.
+- Add regression tests for: first-time model download, successful download, failed/interrupted download, app restart with model already installed, and explicit user-started analysis. Assert that analysis is not invoked in any case until the user taps the analysis action.
