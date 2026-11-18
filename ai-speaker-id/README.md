@@ -44,6 +44,7 @@ For several books, use the batch extractor:
 python ai-speaker-id/prepare_corpus.py \\
   --input-dir ./books \\
   --aliases aliases.json \\
+  --book-ids book_ids.json \\
   --out weak_labels.jsonl \\
   --unresolved unresolved_review.jsonl
 \`\`\`
