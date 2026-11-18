@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Train a candidate-scoring network for novel dialogue speaker attribution.
+"""Train a candidate-scoring network for Russian novel speaker attribution.
 
 Each JSONL row is one quote and its complete candidate list. The model scores
-each (quote, context, candidate) tuple; evaluation is quote-level top-1.
+each (quote, context, candidate) tuple; evaluation is quote-level top-1 and
+confidence/coverage after softmax over the candidate set.
 """
 import argparse
 import json
@@ -10,7 +11,6 @@ import os
 import random
 import re
 from collections import defaultdict
-from dataclasses import dataclass
 
 import torch
 from torch.utils.data import DataLoader, Dataset
@@ -35,13 +35,16 @@ def read_rows(path):
             if not row["candidates"]:
                 raise ValueError(f"{path}:{line_no}: empty candidates")
             target = norm(row["speaker"])
-            matched = any(
-                target == norm(c["name"] if isinstance(c, dict) else c)
-                or target in [norm(x) for x in (c.get("aliases", []) if isinstance(c, dict) else [])]
-                for c in row["candidates"]
-            )
-            if not matched:
-                raise ValueError(f"{path}:{line_no}: speaker not in candidates")
+            matches = []
+            for candidate in row["candidates"]:
+                name = candidate if isinstance(candidate, str) else candidate["name"]
+                aliases = [] if isinstance(candidate, str) else candidate.get("aliases", [])
+                matches.append(target == norm(name) or target in [norm(x) for x in aliases])
+            if sum(matches) != 1:
+                raise ValueError(
+                    f"{path}:{line_no}: speaker must match exactly one candidate; "
+                    f"matched {sum(matches)}"
+                )
             rows.append(row)
     if not rows:
         raise ValueError(f"No rows in {path}")
@@ -73,7 +76,6 @@ def flatten(rows):
                 "text": text,
                 "label": 1.0 if positive else 0.0,
                 "book_id": row["book_id"],
-                "speaker": row["speaker"],
                 "candidate": name,
             })
     return samples
@@ -104,36 +106,49 @@ class PairDataset(Dataset):
 def evaluate(model, loader, samples, device):
     model.eval()
     scores = []
-    offset = 0
     with torch.no_grad():
         for batch in loader:
-            labels = batch.pop("labels")
-            batch = {k: v.to(device) for k, v in batch.items()}
+            batch.pop("labels")
+            batch = {key: value.to(device) for key, value in batch.items()}
             logits = model(**batch).logits.squeeze(-1).float().cpu().tolist()
-            count = len(logits)
             scores.extend(logits)
-            offset += count
+
     groups = defaultdict(list)
     for sample, score in zip(samples, scores):
-        groups[sample["quote_id"]].append((score, sample["label"], sample["candidate"]))
+        groups[sample["quote_id"]].append((float(score), sample["label"], sample["candidate"]))
+
+    total = len(groups)
     correct = 0
-    total = 0
-    accepted = 0
-    accepted_correct = 0
-    for candidates in groups.values():
-        candidates.sort(key=lambda x: x[0], reverse=True)
-        total += 1
-        correct += int(candidates[0][1] == 1.0)
-        margin = candidates[0][0] - (candidates[1][0] if len(candidates) > 1 else -99.0)
-        if margin >= 0.75:
-            accepted += 1
-            accepted_correct += int(candidates[0][1] == 1.0)
-    return {
-        "top1_accuracy": correct / max(total, 1),
-        "coverage_margin_0_75": accepted / max(total, 1),
-        "accuracy_on_accepted": accepted_correct / max(accepted, 1),
-        "quotes": total,
+    threshold_counts = {
+        threshold: {"accepted": 0, "correct": 0}
+        for threshold in (0.70, 0.80, 0.90)
     }
+    for candidates in groups.values():
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        max_score = candidates[0][0]
+        exps = [math_exp(item[0] - max_score) for item in candidates]
+        denominator = sum(exps) or 1.0
+        probabilities = [value / denominator for value in exps]
+        is_correct = candidates[0][1] == 1.0
+        correct += int(is_correct)
+        confidence = probabilities[0]
+        for threshold, values in threshold_counts.items():
+            if confidence >= threshold:
+                values["accepted"] += 1
+                values["correct"] += int(is_correct)
+
+    result = {"top1_accuracy": correct / max(total, 1), "quotes": total}
+    for threshold, values in threshold_counts.items():
+        key = str(int(threshold * 100))
+        result[f"coverage_at_{key}"] = values["accepted"] / max(total, 1)
+        result[f"accuracy_at_{key}"] = values["correct"] / max(values["accepted"], 1)
+    return result
+
+
+def math_exp(value):
+    # Avoid importing numpy; clipping prevents overflow on unusually large logits.
+    import math
+    return math.exp(max(-60.0, min(60.0, value)))
 
 
 def main():
@@ -141,6 +156,7 @@ def main():
     parser.add_argument("--train", required=True)
     parser.add_argument("--dev", required=True)
     parser.add_argument("--model", default="deepvk/RuModernBERT-small")
+    parser.add_argument("--revision", default="patched-tokenizer")
     parser.add_argument("--output", required=True)
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=8)
@@ -152,14 +168,16 @@ def main():
     random.seed(args.seed)
     torch.manual_seed(args.seed)
     train_rows, dev_rows = read_rows(args.train), read_rows(args.dev)
-    train_books = {r["book_id"] for r in train_rows}
-    dev_books = {r["book_id"] for r in dev_rows}
+    train_books = {row["book_id"] for row in train_rows}
+    dev_books = {row["book_id"] for row in dev_rows}
     overlap = train_books & dev_books
     if overlap:
         raise ValueError("Book leakage between train and dev: " + ", ".join(sorted(overlap)))
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
-    model = AutoModelForSequenceClassification.from_pretrained(args.model, num_labels=1)
+    tokenizer = AutoTokenizer.from_pretrained(args.model, revision=args.revision)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        args.model, revision=args.revision, num_labels=1
+    )
     train_samples, dev_samples = flatten(train_rows), flatten(dev_rows)
     train_ds = PairDataset(train_samples, tokenizer, args.max_length)
     dev_ds = PairDataset(dev_samples, tokenizer, args.max_length)
@@ -175,7 +193,7 @@ def main():
         running, steps = 0.0, 0
         for batch in train_loader:
             labels = batch.pop("labels").to(device)
-            batch = {k: v.to(device) for k, v in batch.items()}
+            batch = {key: value.to(device) for key, value in batch.items()}
             logits = model(**batch).logits.squeeze(-1)
             loss = torch.nn.functional.binary_cross_entropy_with_logits(logits, labels)
             loss.backward()
@@ -193,8 +211,8 @@ def main():
             os.makedirs(args.output, exist_ok=True)
             model.save_pretrained(args.output)
             tokenizer.save_pretrained(args.output)
-            with open(os.path.join(args.output, "metrics.json"), "w", encoding="utf-8") as out:
-                json.dump(metrics, out, ensure_ascii=False, indent=2)
+            with open(os.path.join(args.output, "metrics.json"), "w", encoding="utf-8") as output:
+                json.dump(metrics, output, ensure_ascii=False, indent=2)
 
     print(f"Best held-out-book top1 accuracy: {best:.4f}")
 
