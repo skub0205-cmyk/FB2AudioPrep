@@ -170,29 +170,34 @@ old_character_methods = '''    private fun loadCharacters(): List<CharacterProfi
             .putString(characterPrefsKey, CharacterStore.encode(items))
             .apply()
     }'''
-new_character_methods = '''    private fun characterPrefsKeyForCurrentBook(): String {
-        if (originalText.isBlank()) return characterPrefsKey
+new_character_methods = '''    private fun characterPrefsKeyForBook(bookText: String): String {
+        if (bookText.isBlank()) return characterPrefsKey
         val digest = MessageDigest.getInstance("SHA-256")
-            .digest(originalText.toByteArray(Charsets.UTF_8))
+            .digest(bookText.toByteArray(Charsets.UTF_8))
         val hash = digest.joinToString("") { "%02x".format(it) }
         return "book_profiles_" + hash
     }
 
-    private fun loadCharacters(): List<CharacterProfile> {
+    private fun loadCharactersForBook(bookText: String): List<CharacterProfile> {
         val prefs = getSharedPreferences(characterPrefsName, MODE_PRIVATE)
-        val key = characterPrefsKeyForCurrentBook()
+        val key = characterPrefsKeyForBook(bookText)
         val fallback = if (key == characterPrefsKey) "[]" else
             (prefs.getString(characterPrefsKey, "[]") ?: "[]")
         val raw = prefs.getString(key, null) ?: fallback
         return CharacterStore.decode(raw)
     }
 
-    private fun saveCharacters(items: List<CharacterProfile>) {
-        val key = characterPrefsKeyForCurrentBook()
+    private fun saveCharactersForBook(bookText: String, items: List<CharacterProfile>) {
+        val key = characterPrefsKeyForBook(bookText)
         getSharedPreferences(characterPrefsName, MODE_PRIVATE).edit()
             .putString(key, CharacterStore.encode(items))
             .apply()
-    }'''
+    }
+
+    private fun loadCharacters(): List<CharacterProfile> = loadCharactersForBook(originalText)
+
+    private fun saveCharacters(items: List<CharacterProfile>) =
+        saveCharactersForBook(originalText, items)'''
 if new_character_methods not in m:
     if old_character_methods not in m:
         raise SystemExit("Cannot locate character profile persistence methods")
