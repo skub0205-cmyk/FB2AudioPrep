@@ -84,7 +84,7 @@ gpath = Path("app/build.gradle.kts")
 g = gpath.read_text(encoding="utf-8")
 if 'versionName = "2.0.6"' not in g:
     raise SystemExit("Expected app version 2.0.6 before bump")
-m = re.search(r'versionCode\\s*=\\s*(\\d+)', g)
+m = re.search(r'versionCode\s*=\s*(\d+)', g)
 if not m:
     raise SystemExit("Could not locate versionCode")
 g = g[:m.start()] + "versionCode = " + str(int(m.group(1)) + 1) + g[m.end():]
