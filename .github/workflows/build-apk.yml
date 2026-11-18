@@ -37,8 +37,7 @@ jobs:
         with:
           name: FB2AudioPrep-source-inspection
           path: |
-            app/src/main/java/ru/fbaudioprep/MainActivity.kt
-            app/src/main/java/ru/fbaudioprep/BookReaderActivity.kt
+            app/src/main/java/ru/fbaudioprep/
             app/src/main/AndroidManifest.xml
             app/build.gradle.kts
           if-no-files-found: error
