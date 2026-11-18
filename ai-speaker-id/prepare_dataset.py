@@ -86,14 +86,15 @@ def extract(text, book_id, aliases):
             else:
                 speaker, source = speaker_from(tag)
                 reason = "pronoun_requires_coreference" if speaker in ("я", "он", "она") else "speech_verb_without_explicit_name"
-            if not speaker or speaker.casefold() in STOPWORDS:
+            mapped_alias = aliases.get(NORM(speaker)) if speaker else None
+            if not speaker or (speaker.casefold() in STOPWORDS and not mapped_alias):
                 unresolved.append({
                     "quote_id": hashlib.sha1(f"{book_id}:{pi}:{si}".encode()).hexdigest()[:16],
                     "book_id": book_id, "paragraph_index": pi,
                     "quote": utterance, "context": paragraph, "reason": reason
                 })
                 continue
-            canonical = aliases.get(NORM(speaker), speaker)
+            canonical = mapped_alias or speaker
             candidate_aliases.setdefault(canonical, set()).add(speaker)
             before = " ".join(paragraphs[max(0, pi - 2):pi])
             after = " ".join(paragraphs[pi + 1:pi + 3])
