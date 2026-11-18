@@ -83,6 +83,8 @@ jobs:
 
       - name: Fix dialogue dialog dismissal sequencing
         run: python3 patches/apply_v15_dialogue_dialog_lifecycle.py
+      - name: Add offline ONNX neural speaker ranker runtime
+        run: python3 patches/apply_v16_neural_speaker_runtime.py
 
       - name: Configure Java and Kotlin JVM target
         run: |
