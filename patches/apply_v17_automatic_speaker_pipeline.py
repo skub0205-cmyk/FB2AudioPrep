@@ -59,6 +59,8 @@ object CharacterDiscovery {
         "юноша", "юноши", "юноше", "юношу", "мальчик", "мальчика"
     )
 
+    private val normalizedStopWords by lazy { stopWords.map { normalize(it) }.toSet() }
+
     private data class Accumulator(
         val name: String,
         val aliases: MutableSet<String> = linkedSetOf(),
@@ -96,7 +98,7 @@ object CharacterDiscovery {
                 val nameMatch = afterVerb.find(segment) ?: beforeVerb.find(segment) ?: continue
                 val surfaceName = nameMatch.groupValues[1].trim()
                 val key = normalize(surfaceName)
-                if (key.isBlank() || key in stopWords) continue
+                if (key.isBlank() || key in normalizedStopWords) continue
 
                 val profile = found.getOrPut(key) { Accumulator(surfaceName) }
                 profile.aliases += surfaceName
@@ -170,6 +172,44 @@ dialogue.write_text(s, encoding="utf-8")
 
 main = root / "MainActivity.kt"
 m = main.read_text(encoding="utf-8")
+old_character_methods = '''    private fun loadCharacters(): List<CharacterProfile> {
+        val raw = getSharedPreferences(characterPrefsName, MODE_PRIVATE)
+            .getString(characterPrefsKey, "[]") ?: "[]"
+        return CharacterStore.decode(raw)
+    }
+
+    private fun saveCharacters(items: List<CharacterProfile>) {
+        getSharedPreferences(characterPrefsName, MODE_PRIVATE).edit()
+            .putString(characterPrefsKey, CharacterStore.encode(items))
+            .apply()
+    }'''
+new_character_methods = '''    private fun characterPrefsKeyForCurrentBook(): String {
+        if (originalText.isBlank()) return characterPrefsKey
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(originalText.toByteArray(Charsets.UTF_8))
+        val hash = digest.joinToString("") { "%02x".format(it) }
+        return "book_profiles_" + hash
+    }
+
+    private fun loadCharacters(): List<CharacterProfile> {
+        val prefs = getSharedPreferences(characterPrefsName, MODE_PRIVATE)
+        val key = characterPrefsKeyForCurrentBook()
+        val fallback = if (key == characterPrefsKey) "[]" else
+            (prefs.getString(characterPrefsKey, "[]") ?: "[]")
+        val raw = prefs.getString(key, null) ?: fallback
+        return CharacterStore.decode(raw)
+    }
+
+    private fun saveCharacters(items: List<CharacterProfile>) {
+        val key = characterPrefsKeyForCurrentBook()
+        getSharedPreferences(characterPrefsName, MODE_PRIVATE).edit()
+            .putString(key, CharacterStore.encode(items))
+            .apply()
+    }'''
+if new_character_methods not in m:
+    if old_character_methods not in m:
+        raise SystemExit("Cannot locate character profile persistence methods")
+    m = m.replace(old_character_methods, new_character_methods, 1)
 start = m.find("    private fun analyzeDialogues() {")
 end = m.find("    private fun showDialogueReview()", start)
 if start < 0 or end < 0:
