@@ -3,20 +3,28 @@ from pathlib import Path
 p = Path("app/src/main/java/ru/fbaudioprep/teratts/TeraRoleEngine.kt")
 s = p.read_text(encoding="utf-8")
 
-old = """compute = true, threads = 2, stop = stop
-"""
-new = """compute = true, threads = 2, stop = stop, low = false
-"""
-if new in s:
-    print("v21 already applied")
-elif old in s:
-    s = s.replace(old, new, 1)
-    p.write_text(s, encoding="utf-8")
-    print("v21: manual book analysis now runs at normal CPU priority; background TTS callers retain low priority")
-else:
-    raise SystemExit("v21: expected RoleModel.guesses call was not found; refusing to guess")
+# v20 adds progress callbacks after the original stop argument. Insert the named
+# low=false argument after the callback block; do not alter background TTS callers.
+needle = '''                onWindow = { done, total ->
+                    val percent = 10 + (80f * done / total.coerceAtLeast(1)).toInt()
+                    onProgress(percent, "Проверено фрагментов ИИ: $done из $total")
+                }
+            ).orEmpty()'''
+replacement = '''                onWindow = { done, total ->
+                    val percent = 10 + (80f * done / total.coerceAtLeast(1)).toInt()
+                    onProgress(percent, "Проверено фрагментов ИИ: $done из $total")
+                },
+                low = false
+            ).orEmpty()'''
 
-# Keep a small source-level regression check so a future refactor cannot silently restore
-# the background priority for explicit, user-started whole-book analysis.
+if replacement in s:
+    print("v21 already applied")
+elif needle in s:
+    s = s.replace(needle, replacement, 1)
+    p.write_text(s, encoding="utf-8")
+    print("v21: explicit whole-book analysis now runs at normal CPU priority")
+else:
+    raise SystemExit("v21: expected progress-enabled RoleModel.guesses call was not found")
+
 s = p.read_text(encoding="utf-8")
-assert "compute = true, threads = 2, stop = stop, low = false" in s
+assert "low = false" in s
