@@ -13,6 +13,7 @@ object TeraRoleEngine {
     data class Analysis(
         val findings: List<DialogueFinding>,
         val characters: List<DialogueAnalyzer2.Character>,
+        val aliases: Map<String, String>,
         val modelGuesses: Int,
         val modelAvailable: Boolean
     )
@@ -96,7 +97,7 @@ object TeraRoleEngine {
             val spoken = probe.speech.joinToString(" ") { range ->
                 text.substring(range[0].coerceIn(0, text.length), range[1].coerceIn(0, text.length))
             }
-            val addressee = Regex("""^\\s*([А-ЯЁ][а-яёА-ЯЁ-]{1,29})(?=[,!?:…])""")
+            val addressee = Regex("""^\s*([А-ЯЁ][а-яёА-ЯЁ-]{1,29})(?=[,!?:…])""")
                 .find(spoken)?.groupValues?.get(1)
                 ?.takeUnless { it.equals(speaker, ignoreCase = true) }
             val confidence = when {
@@ -121,6 +122,6 @@ object TeraRoleEngine {
             )
         }
 
-        return Analysis(findings, improved.characters, guesses.size, available)
+        return Analysis(findings, improved.characters, improved.aliases, guesses.size, available)
     }
 }
