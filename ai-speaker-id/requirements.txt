@@ -1,5 +1,6 @@
-torch>=2.1
-transformers>=4.40
-tokenizers>=0.19
-onnx>=1.15
-onnxruntime>=1.17
+torch>=2.4
+transformers>=4.48.1
+tokenizers>=0.21
+safetensors>=0.4
+onnx>=1.16
+onnxruntime>=1.19
