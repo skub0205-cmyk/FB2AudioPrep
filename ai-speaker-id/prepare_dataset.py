@@ -95,6 +95,8 @@ def gender_from_speech_tag(tag):
     if not match:
         return "unknown"
     verb = match.group(0).casefold()
+    if verb in {"произнёс", "произнес"}:
+        return "male"
     if verb.endswith(("лась", "ла")):
         return "female"
     if verb.endswith(("лся", "л")):
