@@ -52,6 +52,13 @@ class DatasetPreparationTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["speaker"], "Самуру")
 
+    def test_literal_escaped_newlines_are_split_into_paragraphs(self):
+        paragraphs = module.paragraphs_of(
+            "Начало.\\nПродолжение.\\n\\n— Привет! — сказал Дима."
+        )
+        self.assertEqual(len(paragraphs), 2)
+        self.assertIn("Привет!", paragraphs[1])
+
     def test_explicit_first_person_alias_maps_to_protagonist(self):
         rows, unresolved, candidates, _ = module.extract(
             "— Не начинай, — буркнул я.",
