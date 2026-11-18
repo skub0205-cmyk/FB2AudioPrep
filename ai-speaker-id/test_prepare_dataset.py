@@ -54,7 +54,7 @@ class DatasetPreparationTests(unittest.TestCase):
 
     def test_sentence_adverbs_are_not_speaker_names(self):
         rows, unresolved, candidates, _ = self.extract(
-            "Зато ответила немного встрепенувшаяся ламия, которая начала говорить."
+            "— Понятно. — ответила немного встрепенувшаяся ламия, которая начала говорить."
         )
         self.assertEqual(rows, [])
         self.assertEqual(len(unresolved), 1)
