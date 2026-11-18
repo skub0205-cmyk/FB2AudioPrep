@@ -1,7 +1,8 @@
-role_windows = Path("app/src/main/java/ru/fbaudioprep/teratts/RoleWindows.kt")
-s = role_windows.read_text(encoding="utf-8")
 from pathlib import Path
 import re
+
+role_windows = Path("app/src/main/java/ru/fbaudioprep/teratts/RoleWindows.kt")
+s = role_windows.read_text(encoding="utf-8")
 
 old_target_class = '''    class Target(val pi: Int, val span: IntArray, val speech: List<IntArray>, val kind: Int, val rules: String) {
         val hard get() = kind == 0
