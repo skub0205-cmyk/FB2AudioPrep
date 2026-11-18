@@ -155,7 +155,7 @@ g = gpath.read_text(encoding="utf-8")
 m = re.search(r'versionCode\s*=\s*(\d+)\s*;\s*versionName\s*=\s*"([^"]+)"', g)
 if not m:
     raise SystemExit("Cannot locate app version")
-g = g[:m.start()] + f'versionCode = {int(m.group(1)) + 1}; versionName = "2.1.1"' + g[m.end():]
+g = g[:m.start()] + f'versionCode = {int(m.group(1)) + 1}; versionName = "2.1.2"' + g[m.end():]
 gpath.write_text(g, encoding="utf-8")
 
 print("Added contextual m10b targets for attributed quotes, protected explicit quote attribution, added regression tests, bumped app to 2.1.1.")
