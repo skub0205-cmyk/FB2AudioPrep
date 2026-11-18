@@ -66,6 +66,9 @@ jobs:
       - name: Add automatic Russian dialogue attribution analyzer
         run: python3 patches/apply_v9_dialogue_analyzer.py
 
+      - name: Fix asynchronous book import and large-book reader handoff
+        run: python3 patches/apply_v10_import_reliability.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
