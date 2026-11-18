@@ -120,21 +120,30 @@ jobs:
           
       - name: Configure persistent APK signing
         env:
-          FB2_KEYSTORE_BASE64: ${{ secrets.FB2_KEYSTORE_BASE64 }}
-          FB2_KEYSTORE_PASSWORD: ${{ secrets.FB2_KEYSTORE_PASSWORD }}
-          FB2_KEY_ALIAS: ${{ secrets.FB2_KEY_ALIAS }}
-          FB2_KEY_PASSWORD: ${{ secrets.FB2_KEY_PASSWORD }}
-          FB2_KEYSTORE_PATH: ${{ runner.temp }}/fb2audioprep-signing.jks
+          FB2_SIGNING_BUNDLE: ${{ secrets.FB2_SIGNING_BUNDLE }}
         run: |
           set -euo pipefail
-          for name in FB2_KEYSTORE_BASE64 FB2_KEYSTORE_PASSWORD FB2_KEY_ALIAS FB2_KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "Missing GitHub Actions secret: $name" >&2
-              exit 1
-            fi
-          done
-          echo "$FB2_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/fb2audioprep-signing.jks"
-          chmod 600 "$RUNNER_TEMP/fb2audioprep-signing.jks"
+          if [ -z "${FB2_SIGNING_BUNDLE:-}" ]; then
+            echo "Missing GitHub Actions secret: FB2_SIGNING_BUNDLE" >&2
+            exit 1
+          fi
+          python3 - <<'PY'
+          import base64, json, os
+          bundle = json.loads(base64.b64decode(os.environ["FB2_SIGNING_BUNDLE"]))
+          keystore_path = os.path.join(os.environ["RUNNER_TEMP"], "fb2audioprep-signing.jks")
+          with open(keystore_path, "wb") as f:
+              f.write(base64.b64decode(bundle["keystore_base64"]))
+          os.chmod(keystore_path, 0o600)
+          values = {
+              "FB2_KEYSTORE_PATH": keystore_path,
+              "FB2_KEYSTORE_PASSWORD": bundle["store_password"],
+              "FB2_KEY_ALIAS": bundle["key_alias"],
+              "FB2_KEY_PASSWORD": bundle["key_password"],
+          }
+          with open(os.environ["GITHUB_ENV"], "a") as env:
+              for key, value in values.items():
+                  env.write(f"{key}={value}\\n")
+          PY
           python3 - <<'PY'
           from pathlib import Path
           p = Path("app/build.gradle.kts")
