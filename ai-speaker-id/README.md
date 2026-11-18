@@ -22,13 +22,15 @@ python ai-speaker-id/prepare_dataset.py \\
   --unresolved unresolved_review.jsonl
 \`\`\`
 
-The extractor only weak-labels an utterance when it finds a nearby explicit character name and speech verb. Passive descriptions such as «раздался женский голос» and unresolved pronouns are sent to unresolved_review.jsonl, not guessed. Review these records and add verified labels before training. An optional JSON alias map can merge confirmed name variants:
+The extractor only weak-labels an utterance when it finds a nearby explicit character name and speech verb. Passive descriptions such as «раздался женский голос» and unresolved pronouns are sent to unresolved_review.jsonl, not guessed. Review these records and add verified labels before training. An optional JSON alias map can merge confirmed name variants. It should be scoped by canonical book ID so the first-person narrator in one novel is never mapped to a character in another:
 
 \`\`\`json
 {
-  "я": "Нико",
-  "искин": "ИскИн",
-  "искинн": "ИскИн"
+  "book_001": {
+    "я": "Нико",
+    "искин": "ИскИн",
+    "искинн": "ИскИн"
+  }
 }
 \`\`\`
 
