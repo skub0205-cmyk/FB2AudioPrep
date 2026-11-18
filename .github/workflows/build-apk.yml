@@ -72,6 +72,9 @@ jobs:
       - name: Improve dialogue attribution and add regression tests
         run: python3 patches/apply_v11_dialogue_regressions.py
 
+      - name: Add visible dialogue browser and review without profiles
+        run: python3 patches/apply_v12_dialogue_browser_ui.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
