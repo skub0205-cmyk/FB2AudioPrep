@@ -186,6 +186,8 @@ main.write_text(m, encoding="utf-8")
 gradle = Path("app/build.gradle.kts")
 g = gradle.read_text(encoding="utf-8")
 g = g.replace('    implementation("ai.djl.huggingface:tokenizers:0.30.0")\n', "")
+if "ai.djl.huggingface:tokenizers" not in g:
+    g += '\ndependencies {\n    implementation("ai.djl.huggingface:tokenizers:0.30.0")\n}\n'
 if "onnxruntime-android" not in g:
     g += '\ndependencies {\n    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")\n}\n'
 if "kotlinx-coroutines-android" not in g:
