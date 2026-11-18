@@ -71,3 +71,20 @@ User acceptance requirement (November 2026):
 - On subsequent launches, model presence must not trigger analysis. Loading or initializing the model is not the same as running book analysis.
 - Keep download progress and analysis progress as separate indicators with separate cancellation/lifecycle handling.
 - Add regression tests for: first-time model download, successful download, failed/interrupted download, app restart with model already installed, and explicit user-started analysis. Assert that analysis is not invoked in any case until the user taps the analysis action.
+
+
+## 6. Dialogue-analysis performance work (measured baseline)
+
+Observed on the user's Android device with a Russian book of 506,000 characters / 76,268 words:
+- 129 model fragments;
+- full analysis completed in approximately 20–25 minutes;
+- this is the baseline to compare against, not a claimed benchmark for other devices.
+
+Optimization order:
+1. For explicit, user-started analysis, use normal CPU priority. Keep background priority for analysis scheduled beside active TTS playback.
+2. Measure 2 vs 4 ONNX intra-op threads on the target device before choosing a default. Do not assume more threads are always faster; thermal throttling and memory bandwidth can reverse the result.
+3. Record elapsed time per model window, tokenizer time, inference time, number of windows, cache hits, and device thread count.
+4. Only after profiling, reduce duplicated overlap work. Keep the current 4,000-character core and 1,800-character side context until regression tests show that any change preserves attribution quality.
+5. Compare identical book/model/device runs and inspect the user's difficult cases (Niko and IsKin) before accepting a speed change.
+
+Acceptance: no regression in dialogue speaker/voice attribution or manual corrections; progress remains accurate; model download never starts analysis automatically.
