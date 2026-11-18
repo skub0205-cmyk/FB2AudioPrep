@@ -115,7 +115,7 @@ replacement = r'''    private fun load(uri: Uri) {
 
 '''
 pattern = r"    private fun load\(uri: Uri\) \{.*?\n    \}\n\n    private fun accentBook\(\)"
-s, n = re.subn(pattern, replacement + "    private fun accentBook()", s, count=1, flags=re.S)
+s, n = re.subn(pattern, lambda _match: replacement + "    private fun accentBook()", s, count=1, flags=re.S)
 if n != 1:
     raise SystemExit("Could not replace load(uri) safely")
 
@@ -139,7 +139,7 @@ reader_function = r'''    private fun openBookPreview() {
 
 '''
 p = r"    private fun openBookPreview\(\) \{.*?\n    \}\n\n    private fun openBook\(\)"
-s, n = re.subn(p, reader_function + "    private fun openBook()", s, count=1, flags=re.S)
+s, n = re.subn(p, lambda _match: reader_function + "    private fun openBook()", s, count=1, flags=re.S)
 if n != 1:
     raise SystemExit("Could not replace openBookPreview() safely")
 s = re.sub(r"FB2 AudioPrep [0-9.]+", "FB2 AudioPrep 2.0.2", s)
