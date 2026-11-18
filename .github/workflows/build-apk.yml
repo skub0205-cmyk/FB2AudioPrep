@@ -118,6 +118,50 @@ jobs:
           }
           EOF
           
+      - name: Configure persistent APK signing
+        env:
+          FB2_KEYSTORE_BASE64: ${{ secrets.FB2_KEYSTORE_BASE64 }}
+          FB2_KEYSTORE_PASSWORD: ${{ secrets.FB2_KEYSTORE_PASSWORD }}
+          FB2_KEY_ALIAS: ${{ secrets.FB2_KEY_ALIAS }}
+          FB2_KEY_PASSWORD: ${{ secrets.FB2_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in FB2_KEYSTORE_BASE64 FB2_KEYSTORE_PASSWORD FB2_KEY_ALIAS FB2_KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "Missing GitHub Actions secret: $name" >&2
+              exit 1
+            fi
+          done
+          echo "$FB2_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/fb2audioprep-signing.jks"
+          chmod 600 "$RUNNER_TEMP/fb2audioprep-signing.jks"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("app/build.gradle.kts")
+          s = p.read_text()
+          s = s.replace("versionCode = 20", 'versionCode = 20 + System.getenv("GITHUB_RUN_NUMBER").toInt()')
+          p.write_text(s)
+          PY
+          cat >> app/build.gradle.kts <<'EOF'
+
+          android {
+              signingConfigs {
+                  create("stable") {
+                      storeFile = file(System.getenv("FB2_KEYSTORE_PATH"))
+                      storePassword = System.getenv("FB2_KEYSTORE_PASSWORD")
+                      keyAlias = System.getenv("FB2_KEY_ALIAS")
+                      keyPassword = System.getenv("FB2_KEY_PASSWORD")
+                  }
+              }
+              buildTypes {
+                  getByName("debug") {
+                      signingConfig = signingConfigs.getByName("stable")
+                  }
+              }
+          }
+          EOF
+        env:
+          FB2_KEYSTORE_PATH: ${{ runner.temp }}/fb2audioprep-signing.jks
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
