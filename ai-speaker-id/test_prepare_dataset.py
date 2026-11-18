@@ -52,6 +52,17 @@ class DatasetPreparationTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["speaker"], "Самуру")
 
+    def test_explicit_first_person_alias_maps_to_protagonist(self):
+        rows, unresolved, candidates, _ = module.extract(
+            "— Не начинай, — буркнул я.",
+            "fixture-book",
+            {"я": "Нико"},
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["speaker"], "Нико")
+        self.assertEqual(candidates[0]["aliases"], ["я"])
+        self.assertEqual(unresolved, [])
+
     def test_sentence_adverbs_are_not_speaker_names(self):
         rows, unresolved, candidates, _ = self.extract(
             "— Понятно. — ответила немного встрепенувшаяся ламия, которая начала говорить."
