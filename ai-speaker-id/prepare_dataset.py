@@ -105,6 +105,10 @@ def gender_from_speech_tag(tag):
 
 
 def extract(text, book_id, aliases):
+    # Aliases may be global or scoped to a canonical book ID. Scope is required
+    # for first-person narrators: "я" must never map to one protagonist across books.
+    if book_id in aliases and isinstance(aliases[book_id], dict):
+        aliases = aliases[book_id]
     paragraphs = paragraphs_of(text)
     labelled, unresolved = [], []
     candidate_aliases = {}
