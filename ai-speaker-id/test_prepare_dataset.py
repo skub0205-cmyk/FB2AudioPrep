@@ -56,8 +56,9 @@ class DatasetPreparationTests(unittest.TestCase):
         paragraphs = module.paragraphs_of(
             "Начало.\\nПродолжение.\\n\\n— Привет! — сказал Дима."
         )
-        self.assertEqual(len(paragraphs), 2)
-        self.assertIn("Привет!", paragraphs[1])
+        self.assertEqual(len(paragraphs), 3)
+        self.assertIn("Продолжение.", paragraphs[1])
+        self.assertIn("Привет!", paragraphs[2])
 
     def test_explicit_first_person_alias_maps_to_protagonist(self):
         rows, unresolved, candidates, _ = module.extract(
