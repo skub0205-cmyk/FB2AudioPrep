@@ -22,8 +22,8 @@ VERBS = (
 )
 VERB_RE = re.compile(rf"(?iu)\b(?:{VERBS})\b")
 NAME = r"([А-ЯЁ][а-яёА-ЯЁ-]{1,29})"
-NAME_AFTER_VERB = re.compile(rf"(?iu)\b(?:{VERBS})\b[^.!?]{{0,100}}?\b{NAME}")
-NAME_BEFORE_VERB = re.compile(rf"(?iu)\b{NAME}(?:\s+[а-яё-]+){{0,4}}\s+(?:{VERBS})\b")
+NAME_AFTER_VERB = re.compile(rf"(?iu:\b(?:{VERBS})\b)(?:\s+[а-яё-]+){{0,2}}\s+{NAME}")
+NAME_BEFORE_VERB = re.compile(rf"\b{NAME}(?:\s+[а-яё-]+){{0,2}}\s+(?iu:{VERBS})\b")
 PRONOUN_TAG = re.compile(r"(?iu)\b(?:сказал|сказала|ответил|ответила|спросил|спросила|буркнул|буркнула|проворчал|проворчала)\s+(я|он|она)\b")
 PASSIVE = re.compile(r"(?iu)\b(?:раздался|раздалось|прозвучал|прозвучало)\b.*\bголос")
 QUOTE = re.compile(r"[«“\"]([^»”\"]{2,1200})[»”\"]")
