@@ -35,7 +35,7 @@ else:
 gradle = Path("app/build.gradle.kts")
 g = gradle.read_text(encoding="utf-8")
 import re
-m = re.search(r'versionCode\\s*=\\s*(\\d+)\\s*;\\s*versionName\\s*=\\s*"([^"]+)"', g)
+m = re.search(r'versionCode\s*=\s*(\d+)\s*;\s*versionName\s*=\s*"([^"]+)"', g)
 if not m:
     raise SystemExit("v24: cannot locate app version")
 if m.group(2) != "2.1.3":
