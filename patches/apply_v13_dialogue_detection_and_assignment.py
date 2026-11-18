@@ -20,7 +20,7 @@ replacement = """    private fun splitIntoDialogueUnits(text: String): List<Stri
             if (trimmed.isEmpty()) { flush(); continue }
             val startsDashDialogue = trimmed.startsWith("—") || trimmed.startsWith("–")
             if (startsDashDialogue && current.isNotEmpty()) flush()
-            if (current.isNotEmpty()) current.append('\\\\n')
+            if (current.isNotEmpty()) current.append(System.lineSeparator())
             current.append(trimmed)
         }
         flush()
@@ -36,7 +36,6 @@ if "private fun splitIntoDialogueUnits" not in s:
 s = s.replace("""                    isDialogueLine(paragraph) ||
                     (hasQuotedSpeech && hasSpeechVerb(paragraph)) ||
 """, """                    isDialogueLine(paragraph) ||
-                    Regex("(?m)^[\\\\t ]*[—–]\\\\s+\\\\S").containsMatchIn(paragraph) ||
                     (hasQuotedSpeech && hasSpeechVerb(paragraph)) ||
 """, 1)
 p.write_text(s, encoding="utf-8")
