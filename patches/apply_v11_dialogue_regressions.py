@@ -35,7 +35,7 @@ if "private val sameVoiceContinuation" not in text:
     insert = """    // Explicit authorial continuity ("всё тем же ровным голосом") is stronger
     // than simply choosing the next character with the same gender.
     private val sameVoiceContinuation = Regex(
-        """ + '"""(?iu)\\\\b(?:все|всё)?\\\\s*(?:тем же|таким же|прежним|тем самым|таким самым)\\\\s+(?:[\\\\p{L}\\\\p{M}-]+\\\\s+){0,3}голосом\\\\b"""' + """
+        """ + '"""(?iu)\\b(?:все|всё)?\\s*(?:тем же|таким же|прежним|тем самым|таким самым)\\s+(?:[\p{L}\p{M}-]+\s+){0,3}голосом\\b"""' + """
     )
 
 """
