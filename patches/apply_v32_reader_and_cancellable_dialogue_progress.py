@@ -90,10 +90,10 @@ main.write_text(s, encoding="utf-8")
 role_model = base / "teratts/RoleModel.kt"
 r = role_model.read_text(encoding="utf-8")
 old_count = '''            val had = done.size
-            val first = ws.indexOfFirst'''
+            val tid = android.os.Process.myTid()'''
 new_count = '''            val had = done.size
             onWindow(done.size, ws.size)
-            val first = ws.indexOfFirst'''
+            val tid = android.os.Process.myTid()'''
 if old_count not in r:
     raise SystemExit("v32: cannot locate RoleModel block-plan counter insertion")
 r = r.replace(old_count, new_count, 1)
