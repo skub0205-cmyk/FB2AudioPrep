@@ -84,7 +84,7 @@ object AudiotomeTheme {
         view.textSize = 13f
         view.typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
         view.isAllCaps = false
-        view.background = rounded(
+        view.background = roundedFor(view,
             if (prominent) gold else surfaceRaised,
             if (prominent) gold else line,
             13f
@@ -97,17 +97,9 @@ object AudiotomeTheme {
     private fun styleInput(view: EditText) {
         view.setTextColor(text)
         view.setHintTextColor(muted)
-        view.background = rounded(surfaceRaised, line, 12f)
+        view.background = roundedFor(view, surfaceRaised, line, 12f)
         view.setPadding(dp(view, 13), dp(view, 11), dp(view, 13), dp(view, 11))
     }
-
-    private fun rounded(fill: Int, stroke: Int, radius: Float) = GradientDrawable().apply {
-        setColor(fill)
-        cornerRadius = radius *  viewDensity
-        setStroke((viewDensity).toInt().coerceAtLeast(1), stroke)
-    }
-
-    private var viewDensity = 1f
 
     private fun dp(view: View, value: Int): Int =
         (value * view.resources.displayMetrics.density).toInt()
