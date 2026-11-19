@@ -145,6 +145,20 @@ if reader.exists():
         r = "\n".join(out) + "\n"
     reader.write_text(r, encoding="utf-8")
 
+# Apply the theme to the actual home screen as well as the reader.
+main = root / "MainActivity.kt"
+if main.exists():
+    m = main.read_text(encoding="utf-8")
+    if "AudiotomeTheme.apply(this)" not in m:
+        # MainActivity creates its view tree programmatically; apply after it is attached.
+        m = re.sub(
+            r"(\s*setContentView\(root\)\s*)",
+            r"\1\n        AudiotomeTheme.apply(this)\n",
+            m,
+            count=1
+        )
+    main.write_text(m, encoding="utf-8")
+
 # Keep app identity/version coherent with the redesigned interface.
 gradle = Path("app/build.gradle.kts")
 g = gradle.read_text(encoding="utf-8")
