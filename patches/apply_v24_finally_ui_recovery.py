@@ -17,12 +17,9 @@ else:
             // Always release the analysis UI after the worker has actually exited.
             // Posted after success/error callbacks, so it cannot dismiss the dialog early.
             runOnUiThread {
-                if (token == dialogueAnalysisToken) {
-                    if (analysisProgress.isShowing) analysisProgress.dismiss()
-                    dialogueAnalysisInProgress = false
-                    dialogueButton.isEnabled = true
-                    characterButton.isEnabled = true
-                }
+                dialogueAnalysisInProgress = false
+                dialogueButton.isEnabled = true
+                characterButton.isEnabled = true
             }
         }
         // v24-finally-ui-recovery
