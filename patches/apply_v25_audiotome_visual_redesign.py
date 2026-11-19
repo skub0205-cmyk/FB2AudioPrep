@@ -45,7 +45,7 @@ object AudiotomeTheme {
     }
 
     private fun styleTree(group: ViewGroup, depth: Int) {
-        if (depth == 0) group.setBackgroundColor(background)
+        if (depth == 0 || group is LinearLayout || group is ScrollView) group.setBackgroundColor(background)
         for (index in 0 until group.childCount) {
             val child = group.getChildAt(index)
             when (child) {
