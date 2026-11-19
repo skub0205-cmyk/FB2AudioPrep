@@ -242,3 +242,5 @@ jobs:
           if-no-files-found: error
 
 # Rebuild after fixing the v24 analysis worker closure.
+
+# v36 retry: rebuild after reader patch whitespace fix.
