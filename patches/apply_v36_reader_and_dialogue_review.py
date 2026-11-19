@@ -104,7 +104,7 @@ method = r'''    private fun showDialogueReview() {
         }
         fun refreshTabs() {
             tabs.removeAllViews()
-            listOf("Реплики (\${dialogueFindings.size})", "Персонажи (\${loadCharactersForBook(originalText).size})")
+            listOf("Реплики (${dialogueFindings.size})", "Персонажи (${loadCharactersForBook(originalText).size})")
                 .forEachIndexed { index, label ->
                     val button = actionButton(label) {
                         selectedTab = index
@@ -130,7 +130,7 @@ method = r'''    private fun showDialogueReview() {
             val findings = dialogueFindings
             val assigned = findings.count { !it.speaker.isNullOrBlank() }
             val uncertain = findings.count { it.speaker.isNullOrBlank() || it.confidence < 0.70f }
-            summary.text = "Найдено: \${findings.size}   ·   Назначено: $assigned   ·   Проверить: $uncertain"
+            summary.text = "Найдено: ${findings.size}   ·   Назначено: $assigned   ·   Проверить: $uncertain"
             refreshTabs()
             refreshFilters()
             cards.removeAllViews()
@@ -148,10 +148,10 @@ method = r'''    private fun showDialogueReview() {
                     })
                 }
                 visible.forEach { (index, finding) ->
-                    val item = card("\${index + 1}. \${finding.speaker ?: "Не определён"}")
-                    addLine(item, "Голос: \${finding.voice ?: "не определён"}   ·   Уверенность: \${(finding.confidence * 100).toInt()}%")
-                    if (!finding.addressedTo.isNullOrBlank()) addLine(item, "Обращение к: \${finding.addressedTo}")
-                    addLine(item, "Основание: \${finding.reason}")
+                    val item = card("${index + 1}. ${finding.speaker ?: "Не определён"}")
+                    addLine(item, "Голос: ${finding.voice ?: "не определён"}   ·   Уверенность: ${(finding.confidence * 100).toInt()}%")
+                    if (!finding.addressedTo.isNullOrBlank()) addLine(item, "Обращение к: ${finding.addressedTo}")
+                    addLine(item, "Основание: ${finding.reason}")
                     item.addView(textView(finding.fragment, 14f, AudiotomeTheme.text))
                     item.addView(actionButton("Изменить говорящего / голос") {
                         dialog.dismiss()
@@ -171,8 +171,8 @@ method = r'''    private fun showDialogueReview() {
                 profiles.forEach { profile ->
                     val count = findings.count { it.speaker == profile.name }
                     val item = card(profile.name)
-                    addLine(item, "Голос: \${profile.voice}   ·   Реплик: $count")
-                    if (profile.aliases.isNotEmpty()) addLine(item, "Варианты имени: \${profile.aliases.joinToString()}")
+                    addLine(item, "Голос: ${profile.voice}   ·   Реплик: $count")
+                    if (profile.aliases.isNotEmpty()) addLine(item, "Варианты имени: ${profile.aliases.joinToString()}")
                     item.addView(actionButton("Настроить персонажа и голос") {
                         dialog.dismiss()
                         editCharacter(profile) { showDialogueReview() }
