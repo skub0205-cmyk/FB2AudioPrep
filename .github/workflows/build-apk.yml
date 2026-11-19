@@ -147,6 +147,9 @@ jobs:
               "FB2_KEY_ALIAS": bundle["key_alias"],
               "FB2_KEY_PASSWORD": bundle["key_password"],
           }
+          # Mask signing credentials before exporting them to later steps.
+          for value in values.values():
+              print(f"::add-mask::{value}")
           with open(os.environ["GITHUB_ENV"], "a") as env:
               for key, value in values.items():
                   env.write(f"{key}={value}\n")
