@@ -144,6 +144,9 @@ jobs:
       - name: Add persistent dialogue findings and automatic character voice routing
         run: python3 patches/apply_v40_character_voice_routing.py
 
+      - name: Add resumable in-app TeraTTSv2 model download
+        run: python3 patches/apply_v41_in_app_terattsv2_download.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
