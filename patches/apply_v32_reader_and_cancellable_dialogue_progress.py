@@ -44,7 +44,7 @@ new_dialog = '''        dialogueBlocksDone = 0
         dialogueBlocksTotal = 0
         val analysisProgress = android.app.ProgressDialog(this).apply {
             setTitle("Проверка книги на диалоги")
-            setMessage("Подготовка текста…\\nПроверено блоков: 0 из 0\\\\nОсталось: —")
+            setMessage("Подготовка текста…")
             setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
             max = 100
             progress = 0
@@ -59,7 +59,7 @@ new_dialog = '''        dialogueBlocksDone = 0
                     dialogueButton.isEnabled = true
                     characterButton.isEnabled = true
                     reviewDialoguesButton.isEnabled = dialogueFindings.isNotEmpty()
-                    status.text = "Анализ диалогов отменён.\\nПроверено блоков: " +
+                    status.text = "Анализ диалогов отменён. Проверено блоков: " +
                         dialogueBlocksDone + " из " + dialogueBlocksTotal +
                         ". Можно запустить проверку повторно."
                 }
@@ -70,17 +70,21 @@ if old_dialog not in s:
     raise SystemExit("v32: cannot find dialogue progress dialog to make cancellable")
 s = s.replace(old_dialog, new_dialog, 1)
 
-progress_match = re.search(r'(?m)^(\\s*)analysisProgress\\.setMessage\\(stage \\+ .*? \\+ percent \\+ "%"\\)\\s*$', s)
-if not progress_match:
+progress_line = next((i for i, line in enumerate(s.splitlines()) if "analysisProgress.setMessage(stage +" in line), None)
+if progress_line is None:
     raise SystemExit("v32: cannot locate progress message update")
-indent = progress_match.group(1)
-counter_update = (
-    indent + 'Regex("Проверено блоков: (\\\\d+) из (\\\\d+)").find(stage)?.let { match ->\\n' +
-    indent + '    dialogueBlocksDone = match.groupValues[1].toIntOrNull() ?: dialogueBlocksDone\\n' +
-    indent + '    dialogueBlocksTotal = match.groupValues[2].toIntOrNull() ?: dialogueBlocksTotal\\n' +
-    indent + '}\\n'
-)
-s = s[:progress_match.start()] + counter_update + s[progress_match.start():]
+source_lines = s.splitlines()
+indent = source_lines[progress_line][:len(source_lines[progress_line]) - len(source_lines[progress_line].lstrip())]
+counter_lines = [
+    indent + 'val countLine = stage.lineSequence().firstOrNull { it.startsWith("Проверено блоков:") }',
+    indent + 'val counts = countLine?.substringAfter(":")?.trim()?.split(" из ")',
+    indent + 'if (counts?.size == 2) {',
+    indent + '    dialogueBlocksDone = counts[0].toIntOrNull() ?: dialogueBlocksDone',
+    indent + '    dialogueBlocksTotal = counts[1].toIntOrNull() ?: dialogueBlocksTotal',
+    indent + '}'
+]
+source_lines[progress_line:progress_line] = counter_lines
+s = "\n".join(source_lines) + "\n"
 main.write_text(s, encoding="utf-8")
 
 role_model = base / "teratts/RoleModel.kt"
