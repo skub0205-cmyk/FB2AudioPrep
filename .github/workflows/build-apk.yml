@@ -116,6 +116,8 @@ jobs:
         run: python3 patches/apply_v28_live_reader_status.py
       - name: Add warm and dark reading page switch
         run: python3 patches/apply_v29_reader_page_theme_toggle.py
+      - name: Add in-app library and tool section pages
+        run: python3 patches/apply_v30_section_pages.py
 
       - name: Configure Java and Kotlin JVM target
         run: |
