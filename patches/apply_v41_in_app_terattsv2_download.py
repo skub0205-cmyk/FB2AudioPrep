@@ -61,12 +61,13 @@ method = r'''    private fun downloadTeraTtsV2Model() {
                     }
                 }
                 runOnUiThread { status.text = "Загрузка завершена. Проверяю и загружаю ONNX-модель…" }
-                loadedEngine = TeraTtsV2OnnxEngine()
-                val loaded = loadedEngine.load(directory)
+                val engine = TeraTtsV2OnnxEngine()
+                loadedEngine = engine
+                val loaded = engine.load(directory)
                 TeraTtsV2PackImporter.commitInstall(applicationContext)
                 runOnUiThread {
                     ttsEngine?.close()
-                    ttsEngine = loadedEngine
+                    ttsEngine = engine
                     downloadTtsModelButton.isEnabled = true
                     installTtsModelButton.isEnabled = true
                     cancelTtsDownloadButton.visibility = android.view.View.GONE
