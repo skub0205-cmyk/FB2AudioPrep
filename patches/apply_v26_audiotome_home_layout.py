@@ -40,7 +40,7 @@ object AudiotomeHomeLayout {
             setPadding(dp(activity, 20), dp(activity, 22), dp(activity, 20), dp(activity, 28))
             setBackgroundColor(AudiotomeTheme.background)
         }
-        scroll.addView(page, ScrollView.LayoutParams(-1, -2))
+        scroll.addView(page, ViewGroup.LayoutParams(-1, -2))
 
         val title = children.firstOrNull { it is TextView } as? TextView
         val status = children.drop(1).firstOrNull { it is TextView } as? TextView
