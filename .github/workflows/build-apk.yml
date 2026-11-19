@@ -147,6 +147,9 @@ jobs:
       - name: Add resumable in-app TeraTTSv2 model download
         run: python3 patches/apply_v41_in_app_terattsv2_download.py
 
+      - name: Fix low-memory TeraTTSv2 dictionary loading and add dedicated audio navigation
+        run: python3 patches/apply_v42_memory_and_audio_navigation.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
