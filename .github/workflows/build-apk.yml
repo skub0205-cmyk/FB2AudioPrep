@@ -132,6 +132,9 @@ jobs:
       - name: Restore full book reader and add dialogue review workspace
         run: python3 patches/apply_v36_reader_and_dialogue_review.py
 
+      - name: Bind live book text to paper reader and open dialogue review automatically
+        run: python3 patches/apply_v37_live_reader_and_auto_dialogue_review.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
