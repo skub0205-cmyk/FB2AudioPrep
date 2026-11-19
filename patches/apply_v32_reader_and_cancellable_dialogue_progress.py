@@ -70,17 +70,17 @@ if old_dialog not in s:
     raise SystemExit("v32: cannot find dialogue progress dialog to make cancellable")
 s = s.replace(old_dialog, new_dialog, 1)
 
-old_progress = '''                                analysisProgress.progress = percent.coerceIn(0, 100)
-                                analysisProgress.setMessage(stage + "\\\\n" + percent + "%")'''
-new_progress = '''                                analysisProgress.progress = percent.coerceIn(0, 100)
-                                Regex("Проверено блоков: (\\\\d+) из (\\\\d+)").find(stage)?.let { match ->
-                                    dialogueBlocksDone = match.groupValues[1].toIntOrNull() ?: dialogueBlocksDone
-                                    dialogueBlocksTotal = match.groupValues[2].toIntOrNull() ?: dialogueBlocksTotal
-                                }
-                                analysisProgress.setMessage(stage + "\\\\n" + percent + "%")'''
-if old_progress not in s:
+progress_match = re.search(r'(?m)^(\\s*)analysisProgress\\.setMessage\\(stage \\+ .*? \\+ percent \\+ "%"\\)\\s*$', s)
+if not progress_match:
     raise SystemExit("v32: cannot locate progress message update")
-s = s.replace(old_progress, new_progress, 1)
+indent = progress_match.group(1)
+counter_update = (
+    indent + 'Regex("Проверено блоков: (\\\\d+) из (\\\\d+)").find(stage)?.let { match ->\\n' +
+    indent + '    dialogueBlocksDone = match.groupValues[1].toIntOrNull() ?: dialogueBlocksDone\\n' +
+    indent + '    dialogueBlocksTotal = match.groupValues[2].toIntOrNull() ?: dialogueBlocksTotal\\n' +
+    indent + '}\\n'
+)
+s = s[:progress_match.start()] + counter_update + s[progress_match.start():]
 main.write_text(s, encoding="utf-8")
 
 role_model = base / "teratts/RoleModel.kt"
