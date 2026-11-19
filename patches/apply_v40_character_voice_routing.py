@@ -7,8 +7,8 @@ _segmenter = root / "TeraTtsV2SpeechSegmenter.kt"
 _segmenter_text = _segmenter.read_text(encoding="utf-8")
 _split_start = _segmenter_text.index("        val paragraphs = bookText.replace(")
 _split_end = _segmenter_text.index("        val output = mutableListOf", _split_start)
-_segmenter_text = _segmenter_text[:_split_start] + r'''        val paragraphs = bookText.replace("\\r\\n", "\\n").replace('\\r', '\\n')
-            .split(Regex("\\\\n\\\\s*\\\\n")).map { it.trim() }.filter { it.isNotBlank() }
+_segmenter_text = _segmenter_text[:_split_start] + r'''        val paragraphs = bookText.replace("\r\n", "\n").replace('\r', '\n')
+            .split(Regex("\\n\\s*\\n")).map { it.trim() }.filter { it.isNotBlank() }
 ''' + _segmenter_text[_split_end:]
 _segmenter.write_text(_segmenter_text, encoding="utf-8")
 
