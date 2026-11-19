@@ -165,6 +165,9 @@ jobs:
       - name: Fix ONNX Runtime output tensor extraction
         run: python3 patches/apply_v47_fix_onnx_output_extraction.py
 
+      - name: Correct ONNX OnnxValue handling and bump app version
+        run: python3 patches/apply_v48_fix_onnxvalue_and_bump_version.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
