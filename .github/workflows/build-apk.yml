@@ -118,6 +118,8 @@ jobs:
         run: python3 patches/apply_v29_reader_page_theme_toggle.py
       - name: Add in-app library and tool section pages
         run: python3 patches/apply_v30_section_pages.py
+      - name: Add return-to-reading navigation from sections
+        run: python3 patches/apply_v31_return_to_reader.py
 
       - name: Configure Java and Kotlin JVM target
         run: |
