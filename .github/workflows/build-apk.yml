@@ -135,6 +135,9 @@ jobs:
       - name: Bind live book text to paper reader and open dialogue review automatically
         run: python3 patches/apply_v37_live_reader_and_auto_dialogue_review.py
 
+      - name: Integrate TeraTTSv2 model import and offline audiobook playback
+        run: python3 patches/apply_v38_terattsv2_playback_integration.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
