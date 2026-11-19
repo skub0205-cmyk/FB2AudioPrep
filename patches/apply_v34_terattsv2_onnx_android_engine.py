@@ -8,10 +8,10 @@ target.write_text(r'''package ru.fbaudioprep
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
-import com.microsoft.onnxruntime.OnnxTensor
-import com.microsoft.onnxruntime.OrtEnvironment
-import com.microsoft.onnxruntime.OrtSession
-import com.microsoft.onnxruntime.TensorInfo
+import ai.onnxruntime.OnnxTensor
+import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtSession
+import ai.onnxruntime.TensorInfo
 import org.json.JSONArray
 import java.io.File
 import java.nio.ByteBuffer
@@ -29,7 +29,7 @@ import kotlin.math.sqrt
 
 /**
  * Native Android ONNX adapter for TeraTTSv2.
- * Release layout: models/*.onnx, styles/<voice>/*.npy, unicode_indexer.json.
+ * Release layout: ONNX model files, voice style arrays, and unicode_indexer.json.
  * Load and synthesize on a worker thread. One instance reuses model sessions.
  */
 class TeraTtsV2OnnxEngine(private val cpuThreads: Int = 4) : AutoCloseable {
@@ -368,6 +368,6 @@ private object NpyStyle {
 gradle = Path("app/build.gradle.kts")
 s = gradle.read_text(encoding="utf-8")
 if "onnxruntime-android" not in s:
-    s += '\n\ndependencies {\n    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.32.0")\n}\n'
+    s += '\n\ndependencies {\n    implementation("ai.onnxruntime:onnxruntime-android:1.32.0")\n}\n'
     gradle.write_text(s, encoding="utf-8")
 print("Added TeraTTSv2 ONNX Runtime inference and AudioTrack streaming adapter.")
