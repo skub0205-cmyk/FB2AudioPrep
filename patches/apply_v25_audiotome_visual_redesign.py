@@ -45,7 +45,7 @@ object AudiotomeTheme {
     }
 
     private fun styleTree(group: ViewGroup, depth: Int) {
-        group.setBackgroundColor(if (depth == 0) background else Color.TRANSPARENT)
+        if (depth == 0) group.setBackgroundColor(background)
         for (index in 0 until group.childCount) {
             val child = group.getChildAt(index)
             when (child) {
@@ -127,23 +127,7 @@ theme = theme.replace('view.background = rounded(\n            if (prominent) go
 theme = theme.replace('view.background = rounded(surfaceRaised, line, 12f)','view.background = roundedFor(view, surfaceRaised, line, 12f)')
 (root / "AudiotomeTheme.kt").write_text(theme, encoding="utf-8")
 
-# Apply the same design system to the main screen after its existing content tree is installed.
-main = root / "MainActivity.kt"
-if not main.exists():
-    raise SystemExit("v25: MainActivity.kt missing")
-s = main.read_text(encoding="utf-8")
-if "AudiotomeTheme.apply(this)" not in s:
-    lines = s.splitlines()
-    out = []
-    for line in lines:
-        out.append(line)
-        if re.match(r"\s*setContentView\(", line):
-            out.append(re.match(r"\s*", line).group(0) + "AudiotomeTheme.apply(this)")
-    if not any("AudiotomeTheme.apply(this)" in line for line in out):
-        raise SystemExit("v25: no setContentView call found in MainActivity")
-    main.write_text("\n".join(out) + "\n", encoding="utf-8")
-
-# Match the reader to the same midnight/gold palette, retaining its reader controls and behavior.
+# MainActivity is deliberately left structurally untouched in this pass.\n\n# Match the reader to the same midnight/gold palette, retaining its reader controls and behavior.
 reader = root / "BookReaderActivity.kt"
 if reader.exists():
     r = reader.read_text(encoding="utf-8")
