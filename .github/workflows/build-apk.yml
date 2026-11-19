@@ -124,6 +124,8 @@ jobs:
         run: python3 patches/apply_v32_reader_and_cancellable_dialogue_progress.py
       - name: Add audiobook speech routing and chunk preparation
         run: python3 patches/apply_v33_audiobook_speech_pipeline.py
+      - name: Add TeraTTSv2 ONNX Runtime Android inference engine
+        run: python3 patches/apply_v34_terattsv2_onnx_android_engine.py
 
       - name: Configure Java and Kotlin JVM target
         run: |
