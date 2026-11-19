@@ -4,7 +4,7 @@ name: Build FB2AudioPrep APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, feature/tts-audiobook-module]
 
 permissions:
   contents: read
