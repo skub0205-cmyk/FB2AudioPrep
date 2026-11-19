@@ -159,6 +159,9 @@ jobs:
       - name: Render long books progressively in the reader
         run: python3 patches/apply_v45_progressive_book_rendering.py
 
+      - name: Show app version below the navigation icons
+        run: python3 patches/apply_v46_show_version_under_navigation.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
