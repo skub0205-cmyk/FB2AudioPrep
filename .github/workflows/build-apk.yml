@@ -108,6 +108,8 @@ jobs:
 
       - name: Apply Audiotome midnight and gold visual redesign
         run: python3 patches/apply_v25_audiotome_visual_redesign.py
+      - name: Rebuild Audiotome home screen layout
+        run: python3 patches/apply_v26_audiotome_home_layout.py
 
       - name: Configure Java and Kotlin JVM target
         run: |
