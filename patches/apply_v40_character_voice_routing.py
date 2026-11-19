@@ -76,10 +76,8 @@ new_method = r'''    private fun startBookPlayback() {
                     val piece = queue[index]
                     runOnUiThread {
                         status.text = "Озвучивание: " + (index + 1) + " из " + queue.size +
-                            "
-" + (if (piece.kind == "narration") "Диктор" else "Персонаж") +
-                            "
-Голос: " + piece.voiceId
+                            "\\n" + (if (piece.kind == "narration") "Диктор" else "Персонаж") +
+                            "\\nГолос: " + piece.voiceId
                     }
                     engine.synthesizeAndPlay(
                         TeraTtsTextFormatter.russian(piece.text),
