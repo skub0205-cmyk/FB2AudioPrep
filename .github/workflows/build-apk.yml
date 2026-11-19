@@ -204,3 +204,5 @@ jobs:
           name: FB2AudioPrep-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+# Rebuild after fixing the v24 analysis worker closure.
