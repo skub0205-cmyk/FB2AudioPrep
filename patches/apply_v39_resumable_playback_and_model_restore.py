@@ -8,6 +8,18 @@ s = s.replace("""            backup.deleteRecursively()
             return installed""", """            // Keep the previous model until ONNX sessions load successfully.
             staging.deleteRecursively()
             return installed""")
+needle = """            if (!sourceRoot.renameTo(installed)) {
+                if (backup.exists()) backup.renameTo(installed)
+                error("Не удалось завершить установку модели")
+            }"""
+replacement = """            if (!sourceRoot.renameTo(installed)) {
+                if (backup.exists()) backup.renameTo(installed)
+                error("Не удалось завершить установку модели")
+            }
+            File(root, ".teratts-v2-install-pending").writeText("1")"""
+assert needle in s, "transactional install anchor missing"
+s = s.replace(needle, replacement, 1)
+
 if "fun commitInstall()" not in s:
     s = s.replace("""    fun install(context: Context, uri: Uri): File {""", """    fun commitInstall(context: Context) {
         val root = File(context.filesDir, "voice-models")
