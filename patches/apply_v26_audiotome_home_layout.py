@@ -3,16 +3,18 @@ from pathlib import Path
 base = Path("app/src/main/java/ru/fbaudioprep")
 main = base / "MainActivity.kt"
 s = main.read_text(encoding="utf-8")
-import re
+old_scroll = """setContentView(ScrollView(this).apply {
+            isFillViewport = true
+            addView(root)
+        })"""
 if "AudiotomeHomeLayout.compose(this, root)" not in s:
-    match = re.search(r"setContentView\s*\(\s*(\w+)\s*\)", s)
-    if not match:
-        print("\n".join(line for line in s.splitlines() if "setContentView" in line))
-        raise SystemExit("Could not locate MainActivity setContentView call")
-    variable = match.group(1)
-    if variable != "root":
-        raise SystemExit("Unexpected MainActivity content root: " + variable)
-    s = s[:match.start()] + "setContentView(AudiotomeHomeLayout.compose(this, root))" + s[match.end():]
+    if old_scroll in s:
+        s = s.replace(old_scroll, """setContentView(AudiotomeHomeLayout.compose(this, root))
+        AudiotomeTheme.apply(this)""", 1)
+    elif "setContentView(root)" in s:
+        s = s.replace("setContentView(root)", "setContentView(AudiotomeHomeLayout.compose(this, root))\\n        AudiotomeTheme.apply(this)", 1)
+    else:
+        raise SystemExit("Could not locate MainActivity root container")
 main.write_text(s, encoding="utf-8")
 
 layout = r'''package ru.fbaudioprep
