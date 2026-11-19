@@ -227,6 +227,13 @@ s = s[:start] + method + s[end:]
 s = s.replace("preview.text = dialogueReport.take(8000)", "preview.text = processedText.ifBlank { originalText }")
 s = s.replace("reviewDialoguesButton.isEnabled = findings.isNotEmpty()", "reviewDialoguesButton.isEnabled = originalText.isNotBlank()")
 
+# The character editor callback owns the next screen. Remove v13's unconditional
+# second review launch to prevent stacked duplicate review windows.
+duplicate_review = '''                if (onSaved != null) onSaved(created) else showCharacters()
+                refreshDialogueReport()
+                showDialogueReview()'''
+s = s.replace(duplicate_review, '''                if (onSaved != null) onSaved(created) else showCharacters()''')
+
 main.write_text(s, encoding="utf-8")
 
 gradle = Path("app/build.gradle.kts")
