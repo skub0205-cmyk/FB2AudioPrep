@@ -44,7 +44,7 @@ new_dialog = '''        dialogueBlocksDone = 0
         dialogueBlocksTotal = 0
         val analysisProgress = android.app.ProgressDialog(this).apply {
             setTitle("Проверка книги на диалоги")
-            setMessage("Подготовка текста…\\\\nПроверено блоков: 0 из 0\\\\nОсталось: —")
+            setMessage("Подготовка текста…\\nПроверено блоков: 0 из 0\\\\nОсталось: —")
             setProgressStyle(android.app.ProgressDialog.STYLE_HORIZONTAL)
             max = 100
             progress = 0
@@ -59,7 +59,7 @@ new_dialog = '''        dialogueBlocksDone = 0
                     dialogueButton.isEnabled = true
                     characterButton.isEnabled = true
                     reviewDialoguesButton.isEnabled = dialogueFindings.isNotEmpty()
-                    status.text = "Анализ диалогов отменён.\\\\nПроверено блоков: " +
+                    status.text = "Анализ диалогов отменён.\\nПроверено блоков: " +
                         dialogueBlocksDone + " из " + dialogueBlocksTotal +
                         ". Можно запустить проверку повторно."
                 }
@@ -98,7 +98,7 @@ role_model.write_text(r, encoding="utf-8")
 engine = base / "teratts/TeraRoleEngine.kt"
 e = engine.read_text(encoding="utf-8")
 old_stage = 'onProgress(percent, "Проверено фрагментов ИИ: $done из $total")'
-new_stage = 'onProgress(percent, "Проверено блоков: $done из $total\\nОсталось: \${total - done}")'
+new_stage = 'onProgress(percent, "Проверено блоков: $done из $total\\nОсталось: ${total - done}")'
 if old_stage not in e:
     raise SystemExit("v32: cannot locate TeraRoleEngine progress stage")
 e = e.replace(old_stage, new_stage, 1)
