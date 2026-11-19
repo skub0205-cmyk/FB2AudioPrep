@@ -5,9 +5,9 @@ main = base / "MainActivity.kt"
 s = main.read_text(encoding="utf-8")
 import re
 if "AudiotomeHomeLayout.compose(this, root)" not in s:
-    match = re.search(r"setContentView\\s*\\(\\s*(\\w+)\\s*\\)", s)
+    match = re.search(r"setContentView\s*\(\s*(\w+)\s*\)", s)
     if not match:
-        print("\\n".join(line for line in s.splitlines() if "setContentView" in line))
+        print("\n".join(line for line in s.splitlines() if "setContentView" in line))
         raise SystemExit("Could not locate MainActivity setContentView call")
     variable = match.group(1)
     if variable != "root":
