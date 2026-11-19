@@ -5,11 +5,9 @@ main = base / "MainActivity.kt"
 s = main.read_text(encoding="utf-8")
 import re
 if "AudiotomeHomeLayout.compose(this, root)" not in s:
-    if not re.search(r"setContentView\\(root\\)", s):
+    if not re.search(r"setContentView\(root\)", s):
         raise SystemExit("MainActivity root handoff not found")
     s = re.sub(r"setContentView\\(root\\)", "setContentView(AudiotomeHomeLayout.compose(this, root))", s, count=1)
-if "AudiotomeTheme.apply(this)" not in s:
-    s = s.replace("setContentView(AudiotomeHomeLayout.compose(this, root))", "setContentView(AudiotomeHomeLayout.compose(this, root))\\n        AudiotomeTheme.apply(this)", 1)
 main.write_text(s, encoding="utf-8")
 
 layout = r'''package ru.fbaudioprep
