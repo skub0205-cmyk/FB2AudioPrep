@@ -26,6 +26,7 @@ else:
             }
         }
         // v24-finally-ui-recovery
+        }.start()
 """
     method = method[:close] + recovery + method[close + len("        }.start()"):]
     s = s[:start] + method + s[end:]
