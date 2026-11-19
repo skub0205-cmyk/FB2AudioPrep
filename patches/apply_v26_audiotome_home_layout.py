@@ -3,10 +3,16 @@ from pathlib import Path
 base = Path("app/src/main/java/ru/fbaudioprep")
 main = base / "MainActivity.kt"
 s = main.read_text(encoding="utf-8")
+import re
 if "AudiotomeHomeLayout.compose(this, root)" not in s:
-    if "setContentView(root)" not in s:
-        raise SystemExit("MainActivity root handoff not found")
-    s = s.replace("setContentView(root)", "setContentView(AudiotomeHomeLayout.compose(this, root))", 1)
+    match = re.search(r"setContentView\\s*\\(\\s*(\\w+)\\s*\\)", s)
+    if not match:
+        print("\\n".join(line for line in s.splitlines() if "setContentView" in line))
+        raise SystemExit("Could not locate MainActivity setContentView call")
+    variable = match.group(1)
+    if variable != "root":
+        raise SystemExit("Unexpected MainActivity content root: " + variable)
+    s = s[:match.start()] + "setContentView(AudiotomeHomeLayout.compose(this, root))" + s[match.end():]
 main.write_text(s, encoding="utf-8")
 
 layout = r'''package ru.fbaudioprep
