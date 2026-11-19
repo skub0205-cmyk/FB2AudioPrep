@@ -30,6 +30,29 @@ s = s[:start_reader] + reader + s[end_reader:]
 s = s.replace("preview.text = dialogueReport.take(8000)", "preview.text = processedText.ifBlank { originalText }")
 s = s.replace("preview.text = processedText.take(8000)", "preview.text = processedText")
 
+# v27 expects the preview TextView to be attached inside a ScrollView before it
+# re-composes the home screen. v10 removed that container when it moved reading
+# to BookReaderActivity; v32 later restored in-place reading but did not restore
+# this view attachment. This missing parent was the blank-book regression.
+if 'root.addView(ScrollView(this).apply { addView(preview) }' not in s:
+    attach_anchor = '''        preview = TextView(this).apply {
+            textSize = 14f
+            setPadding(0, 14, 0, 14)
+            text = "Здесь появится предпросмотр книги."
+        }
+'''
+    attach = attach_anchor + '''        root.addView(
+            ScrollView(this).apply {
+                isFillViewport = false
+                addView(preview)
+            },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f)
+        )
+'''
+    if attach_anchor not in s:
+        raise SystemExit("v36: cannot find preview TextView initialization")
+    s = s.replace(attach_anchor, attach, 1)
+
 # Full-screen review workspace: replica cards, character cards and uncertainty filters.
 start = s.find("    private fun showDialogueReview() {")
 end = s.find("\n    private fun editFindingSpeaker", start)
