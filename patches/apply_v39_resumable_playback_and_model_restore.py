@@ -10,15 +10,20 @@ s = s.replace("""            backup.deleteRecursively()
             return installed""")
 if "fun commitInstall()" not in s:
     s = s.replace("""    fun install(context: Context, uri: Uri): File {""", """    fun commitInstall(context: Context) {
-        File(context.filesDir, "voice-models/.teratts-v2-previous").deleteRecursively()
+        val root = File(context.filesDir, "voice-models")
+        File(root, ".teratts-v2-previous").deleteRecursively()
+        File(root, ".teratts-v2-install-pending").delete()
     }
 
     fun rollbackInstall(context: Context) {
         val root = File(context.filesDir, "voice-models")
+        val pending = File(root, ".teratts-v2-install-pending")
+        if (!pending.exists()) return
         val installed = File(root, "teratts-v2")
         val backup = File(root, ".teratts-v2-previous")
         installed.deleteRecursively()
         if (backup.exists()) backup.renameTo(installed)
+        pending.delete()
     }
 
     fun install(context: Context, uri: Uri): File {""")
