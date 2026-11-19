@@ -147,4 +147,4 @@ if old not in s:
     raise SystemExit("Could not find TeraTtsV2Text stress-normalization insertion point")
 s = s.replace(old, new)
 engine.write_text(s, encoding="utf-8")
-print("Added dictionary-mode RUAccent and conversion of FB2AudioPrep acute marks to TeraTTSv2 stress markers.")
+print("Added dictionary-mode RUAccent, acute-to-plus stress conversion, and offline Russian preprocessing.")
