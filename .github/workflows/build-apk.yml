@@ -153,6 +153,9 @@ jobs:
       - name: Fix SQLite PRAGMA query execution and verify dictionary database
         run: python3 patches/apply_v43_sqlite_pragma_fix.py
 
+      - name: Add bounded lazy audiobook prebuffer
+        run: python3 patches/apply_v44_bounded_audiobook_buffer.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
