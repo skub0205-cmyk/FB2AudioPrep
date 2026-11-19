@@ -150,6 +150,9 @@ jobs:
       - name: Fix low-memory TeraTTSv2 dictionary loading and add dedicated audio navigation
         run: python3 patches/apply_v42_memory_and_audio_navigation.py
 
+      - name: Fix SQLite PRAGMA query execution and verify dictionary database
+        run: python3 patches/apply_v43_sqlite_pragma_fix.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
