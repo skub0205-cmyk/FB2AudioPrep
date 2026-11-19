@@ -21,10 +21,11 @@ reader = '''    private fun openBookPreview() {
     }
 
 '''
-s, n = re.subn(r"    private fun openBookPreview\(\) \{.*?\n    \}\n\n    private fun openBook\(\)",
-               lambda _: reader + "    private fun openBook()", s, count=1, flags=re.S)
-if n != 1:
+start_reader = s.find("    private fun openBookPreview() {")
+end_reader = s.find("    private fun openBook()", start_reader)
+if start_reader < 0 or end_reader < 0:
     raise SystemExit("v36: cannot replace openBookPreview()")
+s = s[:start_reader] + reader + s[end_reader:]
 
 s = s.replace("preview.text = dialogueReport.take(8000)", "preview.text = processedText.ifBlank { originalText }")
 s = s.replace("preview.text = processedText.take(8000)", "preview.text = processedText")
