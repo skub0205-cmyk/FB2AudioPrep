@@ -61,7 +61,7 @@ class TeraTtsV2DictionaryAccentizer private constructor(
     }
 
     private fun accentWord(source: String): String {
-        if (source.contains('+') || source.contains('\u0301')) return source
+        if (source.contains('+') || source.any { it.code == 769 }) return source
         val lower = source.lowercase(Locale.ROOT)
         val yo = yoWords[lower] ?: source
         val normalized = preserveCase(source, yo)
@@ -130,7 +130,7 @@ new = '''        val body = text.substring(4, text.length - 5)
             var index = 0
             while (index < body.length) {
                 val current = body[index]
-                if (index + 1 < body.length && body[index + 1] == '\\\\u0301') {
+                if (index + 1 < body.length && body[index + 1].code == 769) {
                     append('+')
                     append(current)
                     index += 2
