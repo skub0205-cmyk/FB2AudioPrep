@@ -31,9 +31,10 @@ method = r'''    private fun syncReaderContent() {
                 readerScroll?.scrollTo(0, 0)
             }
 
-            readerScroll?.setOnScrollChangeListener { view: ScrollView, _, scrollY, _, _ ->
-                val child = view.getChildAt(0) ?: return@setOnScrollChangeListener
-                if (scrollY + view.height < child.height - 500) return@setOnScrollChangeListener
+            readerScroll?.setOnScrollChangeListener { view: android.view.View, _, scrollY, _, _ ->
+                val scroll = view as? ScrollView ?: return@setOnScrollChangeListener
+                val child = scroll.getChildAt(0) ?: return@setOnScrollChangeListener
+                if (scrollY + scroll.height < child.height - 500) return@setOnScrollChangeListener
                 val currentEnd = readerText.contentDescription?.toString()?.toIntOrNull() ?: 8000
                 if (currentEnd >= visibleText.length) return@setOnScrollChangeListener
                 val nextEnd = (currentEnd + 8000).coerceAtMost(visibleText.length)
