@@ -3,11 +3,10 @@ from pathlib import Path
 base = Path("app/src/main/java/ru/fbaudioprep")
 main = base / "MainActivity.kt"
 s = main.read_text(encoding="utf-8")
-import re
 if "AudiotomeHomeLayout.compose(this, root)" not in s:
-    if not re.search(r"setContentView\(root\)", s):
+    if "setContentView(root)" not in s:
         raise SystemExit("MainActivity root handoff not found")
-    s = re.sub(r"setContentView\\(root\\)", "setContentView(AudiotomeHomeLayout.compose(this, root))", s, count=1)
+    s = s.replace("setContentView(root)", "setContentView(AudiotomeHomeLayout.compose(this, root))", 1)
 main.write_text(s, encoding="utf-8")
 
 layout = r'''package ru.fbaudioprep
