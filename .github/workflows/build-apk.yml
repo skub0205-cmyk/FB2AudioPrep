@@ -129,6 +129,19 @@ jobs:
       - name: Add TeraTTSv2 Russian dictionary stress processing
         run: python3 patches/apply_v35_terattsv2_russian_stress.py
 
+      - name: Restore full book reader and add dialogue review workspace
+        run: python3 patches/apply_v36_reader_and_dialogue_review.py
+
+      - name: Upload patched source for verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: FB2AudioPrep-patched-source
+          path: |
+            app/src/main/java/ru/fbaudioprep/
+            app/src/main/AndroidManifest.xml
+            app/build.gradle.kts
+          if-no-files-found: error
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
