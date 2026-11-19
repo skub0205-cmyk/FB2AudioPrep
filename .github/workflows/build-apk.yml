@@ -112,6 +112,8 @@ jobs:
         run: python3 patches/apply_v26_audiotome_home_layout.py
       - name: Apply book-first reader and persistent icon navigation
         run: python3 patches/apply_v27_book_first_reader.py
+      - name: Keep live book status visible in reader header
+        run: python3 patches/apply_v28_live_reader_status.py
 
       - name: Configure Java and Kotlin JVM target
         run: |
