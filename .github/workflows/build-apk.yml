@@ -106,6 +106,9 @@ jobs:
       - name: Guarantee dialogue analysis UI cleanup on every worker exit
         run: python3 patches/apply_v24_finally_ui_recovery.py
 
+      - name: Apply Audiotome midnight and gold visual redesign
+        run: python3 patches/apply_v25_audiotome_visual_redesign.py
+
       - name: Configure Java and Kotlin JVM target
         run: |
           cat >> app/build.gradle.kts <<'EOF'
