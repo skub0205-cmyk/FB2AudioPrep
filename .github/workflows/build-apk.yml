@@ -120,6 +120,8 @@ jobs:
         run: python3 patches/apply_v30_section_pages.py
       - name: Add return-to-reading navigation from sections
         run: python3 patches/apply_v31_return_to_reader.py
+      - name: Keep book in main reader and add cancellable dialogue progress
+        run: python3 patches/apply_v32_reader_and_cancellable_dialogue_progress.py
 
       - name: Configure Java and Kotlin JVM target
         run: |
