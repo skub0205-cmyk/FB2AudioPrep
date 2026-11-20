@@ -192,6 +192,9 @@ jobs:
       - name: Fix Android EditText setup in searchable library
         run: python3 patches/apply_v56_fix_library_search_edittext.py
 
+      - name: Fix chapter navigation ScrollView initialization order
+        run: python3 patches/apply_v57_fix_chapter_scroll_reference.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
