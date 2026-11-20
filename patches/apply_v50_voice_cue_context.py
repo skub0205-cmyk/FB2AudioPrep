@@ -7,10 +7,10 @@ if not path.exists():
 
 source = path.read_text(encoding="utf-8")
 old = '''    private val femaleCue = Regex(
-        """(?iu)(?:женск\\p{L}*\\s+голос|голос\\p{L}*\\s+женщин\\p{L}*|женщин\\p{L}*\\s+голос)"""
+        """(?iu)(?:женск\\\\w*\\\\s+голос|голос\\\\w*\\\\s+женщин\\\\w*|женщин\\\\w*\\\\s+голос)"""
     )
     private val maleCue = Regex(
-        """(?iu)(?:мужск\\p{L}*\\s+голос|голос\\p{L}*\\s+мужчин\\p{L}*|мужчин\\p{L}*\\s+голос)"""
+        """(?iu)(?:мужск\\\\w*\\\\s+голос|голос\\\\w*\\\\s+мужчин\\\\w*|мужчин\\\\w*\\\\s+голос)"""
     )'''
 new = '''    // Voice descriptions often contain intervening adverbs/adjectives:
     // "раздался в голове приветливый женский голос",
