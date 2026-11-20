@@ -207,6 +207,9 @@ jobs:
       - name: Show embedded FB2 cover thumbnails and nested TOC levels
         run: python3 patches/apply_v61_library_cover_thumbnails.py
 
+      - name: Fix FB2 import memory usage and avoid duplicate parsing
+        run: python3 patches/apply_v62_fb2_import_memory_fix.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
