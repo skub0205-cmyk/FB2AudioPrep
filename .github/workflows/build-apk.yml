@@ -177,6 +177,9 @@ jobs:
       - name: Add unified Audiotome audiobook voice settings and routed playback
         run: python3 patches/apply_v51_unified_audiobook_settings.py
 
+      - name: Persist and restore the last opened book and dialogue findings
+        run: python3 patches/apply_v52_persistent_book_restore.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
