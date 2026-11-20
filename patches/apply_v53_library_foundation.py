@@ -62,7 +62,7 @@ method = r'''    private fun showBookLibrary() {
         val labels = books.map { b ->
             buildString {
                 append(b.title.ifBlank { b.sourceName })
-                if (b.author.isNotBlank()) append("\\n").append(b.author)
+                if (b.author.isNotBlank()) append("\n").append(b.author)
                 append("  ·  ").append(if (b.isFb2) "FB2" else "TXT")
                 append("  ·  ").append(String.format(java.util.Locale.getDefault(), "%,d", b.textLength)).append(" знаков")
             }
@@ -95,7 +95,7 @@ method = r'''    private fun showBookLibrary() {
                             saveTextButton.isEnabled = false
                             saveFb2Button.isEnabled = false
                             refreshTtsResumeKey(loadSaved = true)
-                            status.text = "Книга открыта из библиотеки: ${selected.title}\\nСимволов: ${text.length}"
+                            status.text = "Книга открыта из библиотеки: ${selected.title}\nСимволов: ${text.length}"
                             syncReaderContent()
                         }
                     } catch (e: Throwable) {
