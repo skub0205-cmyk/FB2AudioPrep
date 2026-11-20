@@ -5,15 +5,14 @@ if not path.exists():
     raise SystemExit("v50: speech segmenter not found")
 
 source = path.read_text(encoding="utf-8")
+# v49 emitted double backslashes inside a Kotlin raw regex literal.
 old = r'''    private val femaleCue = Regex(
-        """(?iu)(?:женск\w*\s+голос|голос\w*\s+женщин\w*|женщин\w*\s+голос)"""
+        """(?iu)(?:женск\\w*\\s+голос|голос\\w*\\s+женщин\\w*|женщин\\w*\\s+голос)"""
     )
     private val maleCue = Regex(
-        """(?iu)(?:мужск\w*\s+голос|голос\w*\s+мужчин\w*|мужчин\w*\s+голос)"""
+        """(?iu)(?:мужск\\w*\\s+голос|голос\\w*\\s+мужчин\\w*|мужчин\\w*\\s+голос)"""
     )'''
-new = r'''    // Voice descriptions often contain intervening adverbs/adjectives:
-    // "раздался в голове приветливый женский голос",
-    // "раздался снаружи раздражённый женский голос".
+new = r'''    // Voice descriptions often contain intervening adverbs/adjectives.
     private val femaleCue = Regex(
         """(?iu)(?:женск\p{L}*(?:\s+\p{L}+){0,3}\s+голос|голос(?:\s+\p{L}+){0,3}\s+женщин\p{L}*|женщин\p{L}*(?:\s+\p{L}+){0,3}\s+голос)"""
     )
@@ -21,7 +20,7 @@ new = r'''    // Voice descriptions often contain intervening adverbs/adjectives
         """(?iu)(?:мужск\p{L}*(?:\s+\p{L}+){0,3}\s+голос|голос(?:\s+\p{L}+){0,3}\s+мужчин\p{L}*|мужчин\p{L}*(?:\s+\p{L}+){0,3}\s+голос)"""
     )'''
 if old not in source:
-    raise SystemExit("v50: expected original voice cue patterns not found; refusing to overwrite")
+    raise SystemExit("v50: expected v49 escaped voice cue patterns not found; refusing to overwrite")
 source = source.replace(old, new, 1)
 path.write_text(source, encoding="utf-8")
 
@@ -30,4 +29,4 @@ if test_path.exists():
     tests = test_path.read_text(encoding="utf-8")
     if "приветливый женский голос" not in tests or "раздражённый женский голос" not in tests:
         raise SystemExit("v50: expected Nico regression fixtures missing")
-print("v50: recognize explicit Russian gendered voice descriptions with intervening words using Unicode letter classes.")
+print("v50: repair escaped regex and match explicit Russian gendered voice descriptions with intervening words.")
