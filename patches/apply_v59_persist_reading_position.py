@@ -7,8 +7,8 @@ if "v59-reader-position" not in s:
         "        val isFb2: Boolean, val textLength: Int, val importedAt: Long, val lastOpenedAt: Long\n",
         "        val isFb2: Boolean, val textLength: Int, val importedAt: Long, val lastOpenedAt: Long, val readingPosition: Int = 0\n", 1)
     s = s.replace(
-        "            textLength, old?.importedAt ?: System.currentTimeMillis(), old?.lastOpenedAt ?: 0L)",
-        "            textLength, old?.importedAt ?: System.currentTimeMillis(), old?.lastOpenedAt ?: 0L, old?.readingPosition ?: 0)", 1)
+        "            text.length, old?.importedAt ?: System.currentTimeMillis(), old?.lastOpenedAt ?: 0L)",
+        "            text.length, old?.importedAt ?: System.currentTimeMillis(), old?.lastOpenedAt ?: 0L, old?.readingPosition ?: 0)", 1)
     s = s.replace(
         "    @Synchronized fun remove(c: Context, id: String) {",
         """    // v59-reader-position: persist the last visible character offset for each stable book ID.
