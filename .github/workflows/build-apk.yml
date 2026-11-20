@@ -174,6 +174,9 @@ jobs:
       - name: Fix voice description matching with contextual adjectives
         run: python3 patches/apply_v50_voice_cue_context.py
 
+      - name: Add unified Audiotome audiobook voice settings and routed playback
+        run: python3 patches/apply_v51_unified_audiobook_settings.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
