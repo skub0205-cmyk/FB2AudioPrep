@@ -228,13 +228,11 @@ new = """                    val structured = bookChapters()
 s = s[:start] + new + s[end:]
 # Replace chapter selection with the callback into MainActivity's progressive renderer.
 start = s.find("                                val start = chapters[which].second")
-end = s.find("                                paperScroll.post", start)
+end = s.find('                            .setNegativeButton("Закрыть", null)', start)
 if start < 0 or end < 0: raise SystemExit("v60: cannot locate chapter selection boundaries")
-end = s.find(chr(10), end)
-if end < 0: raise SystemExit("v60: cannot locate end of chapter selection")
 s = s[:start] + """                                val start = chapters[which].second.coerceIn(0, fullText.length)
                                 onChapterSelected(start)
-""" + s[end+1:]
+""" + s[end:]
 p.write_text(s, encoding="utf-8")
 
 # Connect the reader's chapter selection callback to the progressive renderer.
