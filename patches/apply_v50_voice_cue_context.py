@@ -7,19 +7,19 @@ if not path.exists():
 
 source = path.read_text(encoding="utf-8")
 old = '''    private val femaleCue = Regex(
-        """(?iu)(?:женск\\w*\\s+голос|голос\\w*\\s+женщин\\w*|женщин\\w*\\s+голос)"""
+        """(?iu)(?:женск\\p{L}*\\s+голос|голос\\p{L}*\\s+женщин\\p{L}*|женщин\\p{L}*\\s+голос)"""
     )
     private val maleCue = Regex(
-        """(?iu)(?:мужск\\w*\\s+голос|голос\\w*\\s+мужчин\\w*|мужчин\\w*\\s+голос)"""
+        """(?iu)(?:мужск\\p{L}*\\s+голос|голос\\p{L}*\\s+мужчин\\p{L}*|мужчин\\p{L}*\\s+голос)"""
     )'''
 new = '''    // Voice descriptions often contain intervening adverbs/adjectives:
     // "раздался в голове приветливый женский голос",
     // "раздался снаружи раздражённый женский голос".
     private val femaleCue = Regex(
-        """(?iu)(?:женск\\w*(?:\\s+\\p{L}+){0,3}\\s+голос|голос(?:\\s+\\p{L}+){0,3}\\s+женщин\\w*|женщин\\w*(?:\\s+\\p{L}+){0,3}\\s+голос)"""
+        """(?iu)(?:женск\\p{L}*(?:\\s+\\p{L}+){0,3}\\s+голос|голос(?:\\s+\\p{L}+){0,3}\\s+женщин\\p{L}*|женщин\\p{L}*(?:\\s+\\p{L}+){0,3}\\s+голос)"""
     )
     private val maleCue = Regex(
-        """(?iu)(?:мужск\\w*(?:\\s+\\p{L}+){0,3}\\s+голос|голос(?:\\s+\\p{L}+){0,3}\\s+мужчин\\w*|мужчин\\w*(?:\\s+\\p{L}+){0,3}\\s+голос)"""
+        """(?iu)(?:мужск\\p{L}*(?:\\s+\\p{L}+){0,3}\\s+голос|голос(?:\\s+\\p{L}+){0,3}\\s+мужчин\\p{L}*|мужчин\\p{L}*(?:\\s+\\p{L}+){0,3}\\s+голос)"""
     )'''
 if old not in source:
     raise SystemExit("v50: expected voice cue patterns not found; refusing to overwrite")
