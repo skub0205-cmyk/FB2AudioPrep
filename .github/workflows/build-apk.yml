@@ -183,6 +183,9 @@ jobs:
       - name: Add persistent multi-book library and import integration
         run: python3 patches/apply_v53_library_foundation.py
 
+      - name: Add searchable multi-book library and quick add/remove actions
+        run: python3 patches/apply_v54_searchable_library.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
