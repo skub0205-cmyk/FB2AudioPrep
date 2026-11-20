@@ -210,6 +210,9 @@ jobs:
       - name: Fix FB2 import memory usage and avoid duplicate parsing
         run: python3 patches/apply_v62_fb2_import_memory_fix.py
 
+      - name: Fix startup freeze while restoring last FB2 book
+        run: python3 patches/apply_v63_restore_fb2_off_ui_thread.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
