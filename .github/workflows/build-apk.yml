@@ -204,6 +204,9 @@ jobs:
       - name: Parse FB2 section structure, covers and real table of contents
         run: python3 patches/apply_v60_fb2_structure_and_toc.py
 
+      - name: Show embedded FB2 cover thumbnails and nested TOC levels
+        run: python3 patches/apply_v61_library_cover_thumbnails.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
