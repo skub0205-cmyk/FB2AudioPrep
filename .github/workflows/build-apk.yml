@@ -171,6 +171,9 @@ jobs:
       - name: Improve per-utterance voice routing and persist character voices
         run: python3 patches/apply_v49_character_voice_routing.py
 
+      - name: Fix voice description matching with contextual adjectives
+        run: python3 patches/apply_v50_voice_cue_context.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
