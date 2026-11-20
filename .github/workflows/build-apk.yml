@@ -216,6 +216,9 @@ jobs:
       - name: Prevent startup ANR from concurrent FB2 and ONNX restoration
         run: python3 patches/apply_v64_startup_resource_guard.py
 
+      - name: Move book restore and audiobook queue preparation off the UI thread
+        run: python3 patches/apply_v65_background_book_and_tts_work.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
