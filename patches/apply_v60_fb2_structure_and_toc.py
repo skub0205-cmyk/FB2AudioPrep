@@ -230,7 +230,7 @@ s = s[:start] + new + s[end:]
 start = s.find("                                val start = chapters[which].second")
 end = s.find("                                paperScroll.post", start)
 if start < 0 or end < 0: raise SystemExit("v60: cannot locate chapter selection boundaries")
-end = s.find("\\n", end)
+end = s.find(chr(10), end)
 if end < 0: raise SystemExit("v60: cannot locate end of chapter selection")
 s = s[:start] + """                                val start = chapters[which].second.coerceIn(0, fullText.length)
                                 onChapterSelected(start)
