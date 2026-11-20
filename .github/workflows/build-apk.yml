@@ -195,6 +195,9 @@ jobs:
       - name: Fix chapter navigation ScrollView initialization order
         run: python3 patches/apply_v57_fix_chapter_scroll_reference.py
 
+      - name: Use safe ScrollView holder for chapter navigation
+        run: python3 patches/apply_v58_safe_chapter_scroll_holder.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
