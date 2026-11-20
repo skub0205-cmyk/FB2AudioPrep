@@ -232,6 +232,7 @@ end = s.find('                            .setNegativeButton("Закрыть", n
 if start < 0 or end < 0: raise SystemExit("v60: cannot locate chapter selection boundaries")
 s = s[:start] + """                                val start = chapters[which].second.coerceIn(0, fullText.length)
                                 onChapterSelected(start)
+                            }
 """ + s[end:]
 p.write_text(s, encoding="utf-8")
 
