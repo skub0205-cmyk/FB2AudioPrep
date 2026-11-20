@@ -51,7 +51,7 @@ object Fb2DocumentParser {
             val normalized = clean(value)
             if (normalized.isEmpty()) return -1
             val offset = out.length
-            out.append(normalized).append("\\n\\n")
+            out.append(normalized).append("\n\n")
             return offset
         }
 
@@ -71,7 +71,7 @@ object Fb2DocumentParser {
                             blockDepth = p.depth
                             blockBuffer = StringBuilder()
                         }
-                        "empty-line" -> if (titleDepth < 0 && blockDepth < 0) out.append("\\n")
+                        "empty-line" -> if (titleDepth < 0 && blockDepth < 0) out.append("\n")
                         "book-title", "first-name", "middle-name", "last-name" -> {
                             metaTarget = n; metaDepth = p.depth; meta.setLength(0)
                         }
