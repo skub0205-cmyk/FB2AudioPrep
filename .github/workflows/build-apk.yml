@@ -180,6 +180,9 @@ jobs:
       - name: Persist and restore the last opened book and dialogue findings
         run: python3 patches/apply_v52_persistent_book_restore.py
 
+      - name: Add persistent multi-book library and import integration
+        run: python3 patches/apply_v53_library_foundation.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
