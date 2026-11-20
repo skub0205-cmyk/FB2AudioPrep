@@ -3,30 +3,31 @@ from pathlib import Path
 path = Path("app/src/main/java/ru/fbaudioprep/TeraTtsV2SpeechSegmenter.kt")
 if not path.exists():
     raise SystemExit("v50: speech segmenter not found")
-
 source = path.read_text(encoding="utf-8")
-# v49 emitted double backslashes inside a Kotlin raw regex literal.
-old = r'''    private val femaleCue = Regex(
-        """(?iu)(?:женск\\w*\\s+голос|голос\\w*\\s+женщин\\w*|женщин\\w*\\s+голос)"""
-    )
-    private val maleCue = Regex(
-        """(?iu)(?:мужск\\w*\\s+голос|голос\\w*\\s+мужчин\\w*|мужчин\\w*\\s+голос)"""
-    )'''
-new = r'''    // Voice descriptions often contain intervening adverbs/adjectives.
+
+start = source.find("    private val femaleCue = Regex(")
+end_marker = "    )"
+male_start = source.find("    private val maleCue = Regex(", start)
+if start < 0 or male_start < 0:
+    raise SystemExit("v50: voice cue declarations not found")
+male_end = source.find(end_marker, male_start)
+if male_end < 0:
+    raise SystemExit("v50: male voice cue declaration is malformed")
+male_end += len(end_marker)
+
+replacement = r'''    // Explicit descriptions may contain intervening words: "приветливый женский голос".
     private val femaleCue = Regex(
         """(?iu)(?:женск\p{L}*(?:\s+\p{L}+){0,3}\s+голос|голос(?:\s+\p{L}+){0,3}\s+женщин\p{L}*|женщин\p{L}*(?:\s+\p{L}+){0,3}\s+голос)"""
     )
     private val maleCue = Regex(
         """(?iu)(?:мужск\p{L}*(?:\s+\p{L}+){0,3}\s+голос|голос(?:\s+\p{L}+){0,3}\s+мужчин\p{L}*|мужчин\p{L}*(?:\s+\p{L}+){0,3}\s+голос)"""
     )'''
-if old not in source:
-    raise SystemExit("v50: expected v49 escaped voice cue patterns not found; refusing to overwrite")
-source = source.replace(old, new, 1)
+source = source[:start] + replacement + source[male_end:]
 path.write_text(source, encoding="utf-8")
 
 test_path = Path("app/src/test/java/ru/fbaudioprep/TeraTtsV2SpeechSegmenterTest.kt")
 if test_path.exists():
     tests = test_path.read_text(encoding="utf-8")
     if "приветливый женский голос" not in tests or "раздражённый женский голос" not in tests:
-        raise SystemExit("v50: expected Nico regression fixtures missing")
-print("v50: repair escaped regex and match explicit Russian gendered voice descriptions with intervening words.")
+        raise SystemExit("v50: Nico regression fixtures are missing")
+print("v50: widened explicit gender voice cues using Unicode-aware matching.")
