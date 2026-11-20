@@ -205,16 +205,11 @@ s = s.replace(
     'fun compose(activity: Activity, oldRoot: LinearLayout, bookContent: () -> String = { "" }, bookChapters: () -> List<BookLibraryStore.Chapter> = { emptyList() }, onChapterSelected: (Int) -> Unit = {}): View {',
     1
 )
-old = '''                    val chapters = mutableListOf<Pair<String, Int>>()
-                    var offset = 0
-                    fullText.split('\\n').forEach { line ->
-                        val value = line.trim()
-                        val isHeading = value.matches(Regex("(?i)^(глава|часть|пролог|эпилог|интерлюдия)(\\\\s+.*)?$")) ||
-                            value.matches(Regex("^\\\\d{1,3}[.)]?\\\\s+.{2,90}$"))
-                        if (isHeading && value.length <= 110) chapters.add(value to offset)
-                        offset += line.length + 1
-                    }'''
-new = '''                    val structured = bookChapters()
+# Replace the old guessed-heading list with actual FB2 section offsets.
+start = s.find("                    val chapters = mutableListOf<Pair<String, Int>>()")
+end = s.find("                    if (chapters.isEmpty())", start)
+if start < 0 or end < 0: raise SystemExit("v60: cannot locate chapter heuristic boundaries")
+new = """                    val structured = bookChapters()
                     val chapters = if (structured.isNotEmpty()) {
                         structured.map { it.title to it.offset }
                     } else {
@@ -228,19 +223,18 @@ new = '''                    val structured = bookChapters()
                             offset += line.length + 1
                         }
                         fallback
-                    }'''
-if old not in s: raise SystemExit("v60: cannot find chapter heuristic block")
-s = s.replace(old, new, 1)
-old = '''                                val start = chapters[which].second.coerceIn(0, fullText.length)
-                                val end = (start + 8000).coerceAtMost(fullText.length)
-                                readingText.text = fullText.substring(start, end)
-                                readingText.contentDescription = end.toString()
-                                paperScroll.scrollTo(0, 0)
-                                paperScroll.post { paperScroll.scrollTo(0, 0) }'''
-new = '''                                val start = chapters[which].second.coerceIn(0, fullText.length)
-                                onChapterSelected(start)'''
-if old not in s: raise SystemExit("v60: cannot find chapter selection rendering block")
-s = s.replace(old, new, 1)
+                    }
+"""
+s = s[:start] + new + s[end:]
+# Replace chapter selection with the callback into MainActivity's progressive renderer.
+start = s.find("                                val start = chapters[which].second")
+end = s.find("                                paperScroll.post", start)
+if start < 0 or end < 0: raise SystemExit("v60: cannot locate chapter selection boundaries")
+end = s.find("\\n", end)
+if end < 0: raise SystemExit("v60: cannot locate end of chapter selection")
+s = s[:start] + """                                val start = chapters[which].second.coerceIn(0, fullText.length)
+                                onChapterSelected(start)
+""" + s[end+1:]
 p.write_text(s, encoding="utf-8")
 
 # Connect the reader's chapter selection callback to the progressive renderer.
