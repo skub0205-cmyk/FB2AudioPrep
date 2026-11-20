@@ -198,6 +198,9 @@ jobs:
       - name: Use safe ScrollView holder for chapter navigation
         run: python3 patches/apply_v58_safe_chapter_scroll_holder.py
 
+      - name: Persist independent reading position for every book
+        run: python3 patches/apply_v59_persist_reading_position.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
