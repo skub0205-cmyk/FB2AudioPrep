@@ -168,6 +168,9 @@ jobs:
       - name: Correct ONNX OnnxValue handling and bump app version
         run: python3 patches/apply_v48_fix_onnxvalue_and_bump_version.py
 
+      - name: Improve per-utterance voice routing and persist character voices
+        run: python3 patches/apply_v49_character_voice_routing.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
