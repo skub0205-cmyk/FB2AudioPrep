@@ -186,6 +186,9 @@ jobs:
       - name: Add searchable multi-book library and quick add/remove actions
         run: python3 patches/apply_v54_searchable_library.py
 
+      - name: Add chapter navigation to the book-first reader
+        run: python3 patches/apply_v55_reader_chapter_navigation.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
