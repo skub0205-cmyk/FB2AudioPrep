@@ -201,6 +201,9 @@ jobs:
       - name: Persist independent reading position for every book
         run: python3 patches/apply_v59_persist_reading_position.py
 
+      - name: Parse FB2 section structure, covers and real table of contents
+        run: python3 patches/apply_v60_fb2_structure_and_toc.py
+
       - name: Upload patched source for verification
         uses: actions/upload-artifact@v4
         with:
